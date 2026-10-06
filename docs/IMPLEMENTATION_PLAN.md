@@ -371,13 +371,44 @@ Balas HANYA JSON:
 
 ### Validasi & error
 - Parse dengan **zod**; kalau gagal parse → retry 1x, lalu tampilkan error + opsi "Isi manual".
-- Timeout 45 detik, tampilkan loading lucu (maskot sedang "mencicipi" 🍽️).
+- Timeout 60 detik, tampilkan loading lucu (maskot sedang "mencicipi" 🍽️).
 - `mock.ts`: kembalikan contoh "Nasi + Ayam goreng + Sambal" setelah delay 1.5 detik.
 
-### Catatan untuk server Raka (Hermes / proxy)
-- Wajib OpenAI-compatible `/v1/chat/completions` + support input gambar.
-- Cek bearer token; batasi CORS tidak perlu (native app).
-- Endpoint opsional `GET /v1/models` untuk tombol "Tes koneksi".
+### Server AI (sudah di-setup ✅ — 6 Okt 2026)
+
+| Item | Nilai |
+|---|---|
+| Server | `ssh opencraft` (`opencraft-vps`) |
+| Hermes | v0.19.0, profile **`diet-yuk`** (`~/.hermes/profiles/diet-yuk`) |
+| Model | `gpt-5.6-sol` via provider `openai-codex` (langganan ChatGPT) |
+| Service | `systemctl --user {status,restart} hermes-gateway-diet-yuk` (auto-start saat boot) |
+| Endpoint | `http://127.0.0.1:8642/v1` (**masih localhost saja**) |
+| Model name di request | `diet-yuk` |
+| Token | `API_SERVER_KEY` di `~/.hermes/profiles/diet-yuk/.env` (**jangan commit**) |
+| Tools | Semua toolset dimatikan via `agent.disabled_toolsets`; tersisa `vision` saja |
+| Persona | `SOUL.md` = ahli gizi Indonesia, output JSON saja |
+| Log | `journalctl --user -u hermes-gateway-diet-yuk -f` |
+
+Hasil uji (foto nasi goreng + telur + ayam + kerupuk + sambal): JSON valid sesuai skema, 6 item terdeteksi, **±15 detik**, ±4.6k token.
+
+Ambil token:
+```bash
+ssh opencraft 'grep ^API_SERVER_KEY ~/.hermes/profiles/diet-yuk/.env'
+```
+
+Tes lokal dari Mac (tanpa buka port, via SSH tunnel):
+```bash
+ssh -N -L 8642:127.0.0.1:8642 opencraft   # terminal 1
+curl -H "Authorization: Bearer $KEY" http://localhost:8642/v1/models   # terminal 2
+```
+
+Catatan implementasi di app:
+- Respons kadang lebih panjang (`notes`) → timeout app set **60 detik**.
+- Tetap parse dengan zod + strip ```` ```json ```` fence kalau ada.
+- `direct_model_requests` tidak aktif → field `model` di request diabaikan, selalu pakai model profile.
+
+> [!IMPORTANT]
+> **Belum bisa diakses dari iPhone.** Endpoint masih `127.0.0.1`. Perlu salah satu: Cloudflare Tunnel (rekomendasi), Caddy + domain + port 443, atau Tailscale.
 
 ---
 

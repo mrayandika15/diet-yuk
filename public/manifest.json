@@ -1,0 +1,22 @@
+{
+  "name": "Raka & Anggun",
+  "short_name": "R & A",
+  "description": "Catatan makan dan perjalanan sehat Raka & Anggun.",
+  "lang": "id-ID",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#FFF9F4",
+  "theme_color": "#426C50",
+  "categories": ["health", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

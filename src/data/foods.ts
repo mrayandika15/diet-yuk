@@ -1,0 +1,76 @@
+import { referenceItems, fromReference } from "../lib/nutrition";
+import { Food } from "../lib/domain";
+// Starter estimates per 100 g. Not an official TKPI dataset; recipes vary.
+const rows: [string, number, number, number, number, number][] = [
+  ["Nasi putih", 130, 2.7, 28.2, 0.3, 150],
+  ["Nasi merah", 123, 2.7, 25.6, 1, 150],
+  ["Nasi goreng", 200, 5, 30, 7, 250],
+  ["Ayam goreng", 260, 25, 8, 14, 100],
+  ["Dada ayam panggang", 165, 31, 0, 3.6, 100],
+  ["Telur rebus", 155, 13, 1.1, 11, 55],
+  ["Telur ceplok", 196, 13.6, 0.8, 15, 55],
+  ["Tempe", 193, 20.3, 13.5, 10.8, 50],
+  ["Tahu putih", 80, 10.9, 0.8, 4.7, 100],
+  ["Tahu goreng", 170, 12, 5, 12, 50],
+  ["Rendang sapi", 250, 20, 5, 17, 100],
+  ["Ikan kembung", 167, 21, 0, 9, 100],
+  ["Ikan lele goreng", 230, 20, 8, 13, 100],
+  ["Bakso kuah", 100, 6, 12, 3, 250],
+  ["Soto ayam", 80, 7, 4, 4, 300],
+  ["Mie ayam", 175, 8, 24, 5, 300],
+  ["Gado-gado", 140, 5, 13, 8, 250],
+  ["Sayur bayam", 25, 2, 3, 0.5, 150],
+  ["Sayur sop", 35, 1.5, 5, 1, 150],
+  ["Tumis kangkung", 60, 2, 5, 4, 100],
+  ["Kentang rebus", 87, 1.9, 20, 0.1, 150],
+  ["Ubi rebus", 76, 1.4, 18, 0.1, 150],
+  ["Oatmeal kering", 379, 13.2, 67.7, 6.5, 40],
+  ["Roti tawar", 265, 9, 49, 3.2, 30],
+  ["Pisang", 89, 1.1, 22.8, 0.3, 100],
+  ["Apel", 52, 0.3, 13.8, 0.2, 150],
+  ["Pepaya", 43, 0.5, 10.8, 0.3, 150],
+  ["Jeruk", 47, 0.9, 12, 0.1, 130],
+  ["Alpukat", 160, 2, 8.5, 14.7, 100],
+  ["Semangka", 30, 0.6, 7.6, 0.2, 200],
+  ["Susu full cream", 61, 3.2, 4.8, 3.3, 200],
+  ["Yogurt plain", 61, 3.5, 4.7, 3.3, 125],
+  ["Kopi susu gula aren", 90, 2, 14, 3, 250],
+  ["Teh manis", 32, 0, 8, 0, 250],
+  ["Es boba susu", 100, 1, 20, 2, 350],
+  ["Sambal", 120, 2, 15, 6, 15],
+  ["Kerupuk", 500, 3, 65, 25, 20],
+  ["Martabak manis", 330, 6, 45, 14, 80],
+  ["Ayam geprek", 280, 23, 10, 16, 150],
+  ["Bubur ayam", 100, 4, 15, 3, 300],
+  ["Sate ayam", 225, 20, 9, 12, 150],
+  ["Nasi uduk", 180, 3, 28, 6, 150],
+  ["Lontong", 130, 2, 29, 0.2, 150],
+  ["Susu kedelai", 54, 3.3, 6, 1.8, 200],
+  ["Kacang tanah", 567, 26, 16, 49, 25],
+  ["Udang rebus", 99, 24, 0.2, 0.3, 100],
+  ["Broccoli rebus", 35, 2.4, 7.2, 0.4, 100],
+  ["Mentimun", 15, 0.7, 3.6, 0.1, 100],
+  ["Salad buah", 120, 1, 20, 4, 150],
+  ["Air putih", 0, 0, 0, 0, 250],
+];
+const starterFoods: Food[] = rows.map(([name, kcal, p, c, f, g]) => ({
+  name,
+  portion_g: g,
+  calories: (kcal * g) / 100,
+  protein_g: (p * g) / 100,
+  carbs_g: (c * g) / 100,
+  fat_g: (f * g) / 100,
+  source: "reference",
+}));
+export const foods: Food[] = [
+  ...referenceItems.map((f) => fromReference(f)),
+  ...starterFoods.filter(
+    (f) =>
+      !referenceItems.some(
+        (r) => r.name.toLowerCase() === f.name.toLowerCase(),
+      ),
+  ),
+];
+export const mockFoods = starterFoods.filter((f) =>
+  ["Nasi putih", "Ayam goreng", "Sayur bayam"].includes(f.name),
+);

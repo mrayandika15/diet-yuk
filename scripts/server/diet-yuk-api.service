@@ -1,0 +1,13 @@
+[Unit]
+Description=diet-yuk restricted AI gateway
+After=network-online.target hermes-gateway-diet-yuk.service
+[Service]
+ExecStart=/usr/bin/python3 %h/.local/share/diet-yuk/gateway.py
+EnvironmentFile=%h/.hermes/profiles/diet-yuk/.env
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+[Install]
+WantedBy=default.target

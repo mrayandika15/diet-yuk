@@ -1,0 +1,11 @@
+[Unit]
+Description=diet-yuk temporary HTTPS tunnel
+After=network-online.target diet-yuk-api.service
+Requires=diet-yuk-api.service
+[Service]
+ExecStart=%h/.local/bin/cloudflared-diet-yuk tunnel --no-autoupdate --url http://127.0.0.1:8643
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+[Install]
+WantedBy=default.target

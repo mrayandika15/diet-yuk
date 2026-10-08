@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Raka & Anggun",
+    "slug": "diet-yuk",
+    "scheme": "dietyuk",
+    "version": "1.0.0",
+    "platforms": ["web"],
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png",
+      "name": "Raka & Anggun",
+      "shortName": "R & A",
+      "themeColor": "#426C50",
+      "backgroundColor": "#FFF9F4"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pilih foto makanan untuk catatan makanmu.",
+          "cameraPermission": "Foto makanan untuk memperkirakan nutrisi.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-notifications",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#FFF8F3"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

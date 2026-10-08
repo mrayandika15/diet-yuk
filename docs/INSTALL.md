@@ -7,7 +7,7 @@ Prasyarat: Node.js 22+ dan browser modern.
     npm ci
     npm run web
 
-Pilih Raka atau Anggun, isi bio, lalu simpan. Sesi Supabase diingat di browser/PWA yang sama. Nama yang dipilih bukan password untuk membuka akun perangkat lain. Kamera pada ponsel memerlukan origin HTTPS atau localhost.
+Masuk dengan Google memakai salah satu dari dua email yang diizinkan. Siapkan provider dan redirect URL mengikuti [GOOGLE_AUTH.md](GOOGLE_AUTH.md). Sesi Google diingat di browser/PWA. Kamera pada ponsel memerlukan origin HTTPS atau localhost.
 
 ## Build produksi
 
@@ -24,7 +24,15 @@ Upload seluruh isi `dist/` ke hosting HTTPS dengan aturan:
 - `/sw.js` disajikan dari root dengan content type JavaScript.
 - Jangan mengubah nama file bundle ber-hash.
 - Supabase Auth harus mengizinkan URL produksi sebagai redirect URL.
-- Reverse proxy AI harus mengizinkan origin PWA melalui CORS.
+- Analisis AI memakai RPC Supabase yang sama dengan login; tidak perlu mengonfigurasi endpoint atau CORS AI terpisah.
+
+### Vercel + GitHub
+
+Repo sudah memiliki `vercel.json`: install `npm ci`, build `npm run build:pwa`, output `dist/`, dan fallback rute SPA. Hubungkan repo `mrayandika15/diet-yuk` ke Vercel dengan production branch `main`.
+
+Tambahkan `EXPO_PUBLIC_SUPABASE_URL` dan `EXPO_PUBLIC_SUPABASE_ANON_KEY` ke environment Production (dan Preview jika diperlukan). Kedua nilai ini konfigurasi publik frontend; service key dan kredensial AI tetap hanya berada di Opencraft. Jangan upload `.env` atau menambahkan service key ke Vercel.
+
+Daftarkan origin produksi di Supabase Auth sebagai Site URL dan `<origin>/welcome` sebagai redirect URL. Callback Google Cloud tetap menggunakan URL callback Supabase yang sudah dikonfigurasi. Deploy ulang jika environment berubah.
 
 Setelah membuka URL produksi, pilih **Install app** atau **Tambahkan ke Layar Utama** dari menu browser.
 
@@ -36,6 +44,6 @@ Setelah membuka URL produksi, pilih **Install app** atau **Tambahkan ke Layar Ut
 - Mode lokal dapat dibuka kembali saat offline.
 - Kamera dan galeri berfungsi pada origin HTTPS.
 - Update build baru menggantikan cache lama.
-- Login, pairing, upload foto, dan AI real diuji saat kredensial tersedia.
+- Login, pasangan otomatis, upload foto, dan AI real diuji saat kredensial tersedia.
 
-Supabase sudah diuji langsung melalui SDK: simpan bio, pulihkan sesi dari storage, upload foto, CRUD meal, berat, favorit, dan pairing. Jalankan kembali dengan `npm run test:supabase` setelah CLI terhubung ke project yang sama. Script membuat fixture terpisah dan membersihkannya setelah pengujian.
+Implementasi sebelumnya sudah diuji melalui SDK dengan sesi anonim. Setelah migrasi Google, jalankan `npm run test:supabase` untuk pemeriksaan konfigurasi provider dan akses publik (read-only). Uji login Google, pemulihan sesi, dan kedua akun mengikuti `GOOGLE_AUTH.md`.

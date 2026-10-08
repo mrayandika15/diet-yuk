@@ -1,0 +1,6 @@
+.env
+.env.*
+.local
+supabase/.temp
+__pycache__
+*.log

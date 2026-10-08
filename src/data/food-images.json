@@ -1,0 +1,127 @@
+{
+  "provider": "TheMealDB",
+  "source": "https://www.themealdb.com/api.php",
+  "syncedOn": "2026-10-08",
+  "images": {
+    "eggs": {
+      "uri": "/food-images/eggs.png",
+      "remote": "https://www.themealdb.com/images/ingredients/eggs-small.png"
+    },
+    "rice": {
+      "uri": "/food-images/rice.png",
+      "remote": "https://www.themealdb.com/images/ingredients/rice-small.png"
+    },
+    "chicken": {
+      "uri": "/food-images/chicken.png",
+      "remote": "https://www.themealdb.com/images/ingredients/chicken-small.png"
+    },
+    "beef": {
+      "uri": "/food-images/beef.png",
+      "remote": "https://www.themealdb.com/images/ingredients/beef-small.png"
+    },
+    "tempeh": {
+      "uri": "/food-images/tempeh.png",
+      "remote": "https://www.themealdb.com/images/ingredients/tempeh-small.png"
+    },
+    "tofu": {
+      "uri": "/food-images/tofu.png",
+      "remote": "https://www.themealdb.com/images/ingredients/tofu-small.png"
+    },
+    "spinach": {
+      "uri": "/food-images/spinach.png",
+      "remote": "https://www.themealdb.com/images/ingredients/spinach-small.png"
+    },
+    "potatoes": {
+      "uri": "/food-images/potatoes.png",
+      "remote": "https://www.themealdb.com/images/ingredients/potatoes-small.png"
+    },
+    "sweet_potatoes": {
+      "uri": "/food-images/sweet_potatoes.png",
+      "remote": "https://www.themealdb.com/images/ingredients/sweet_potatoes-small.png"
+    },
+    "oats": {
+      "uri": "/food-images/oats.png",
+      "remote": "https://www.themealdb.com/images/ingredients/oats-small.png"
+    },
+    "bread": {
+      "uri": "/food-images/bread.png",
+      "remote": "https://www.themealdb.com/images/ingredients/bread-small.png"
+    },
+    "banana": {
+      "uri": "/food-images/banana.png",
+      "remote": "https://www.themealdb.com/images/ingredients/banana-small.png"
+    },
+    "orange": {
+      "uri": "/food-images/orange.png",
+      "remote": "https://www.themealdb.com/images/ingredients/orange-small.png"
+    },
+    "apples": {
+      "uri": "/food-images/apples.png",
+      "remote": "https://www.themealdb.com/images/ingredients/apples-small.png"
+    },
+    "milk": {
+      "uri": "/food-images/milk.png",
+      "remote": "https://www.themealdb.com/images/ingredients/milk-small.png"
+    },
+    "avocado": {
+      "uri": "/food-images/avocado.png",
+      "remote": "https://www.themealdb.com/images/ingredients/avocado-small.png"
+    },
+    "chilli": {
+      "uri": "/food-images/chilli.png",
+      "remote": "https://www.themealdb.com/images/ingredients/chilli-small.png"
+    },
+    "yogurt": {
+      "uri": "/food-images/yogurt.png",
+      "remote": "https://www.themealdb.com/images/ingredients/yogurt-small.png"
+    },
+    "fish_fillet": {
+      "uri": "/food-images/fish_fillet.png",
+      "remote": "https://www.themealdb.com/images/ingredients/fish_fillet-small.png"
+    },
+    "cucumber": {
+      "uri": "/food-images/cucumber.png",
+      "remote": "https://www.themealdb.com/images/ingredients/cucumber-small.png"
+    },
+    "noodles": {
+      "uri": "/food-images/noodles.png",
+      "remote": "https://www.themealdb.com/images/ingredients/noodles-small.png"
+    },
+    "broccoli": {
+      "uri": "/food-images/broccoli.png",
+      "remote": "https://www.themealdb.com/images/ingredients/broccoli-small.png"
+    },
+    "shrimp": {
+      "uri": "/food-images/shrimp.png",
+      "remote": "https://www.themealdb.com/images/ingredients/shrimp-small.png"
+    },
+    "carrots": {
+      "uri": "/food-images/carrots.png",
+      "remote": "https://www.themealdb.com/images/ingredients/carrots-small.png"
+    },
+    "peanuts": {
+      "uri": "/food-images/peanuts.png",
+      "remote": "https://www.themealdb.com/images/ingredients/peanuts-small.png"
+    },
+    "water": {
+      "uri": "/food-images/water.png",
+      "remote": "https://www.themealdb.com/images/ingredients/water-small.png"
+    },
+    "cassava": {
+      "uri": "/food-images/cassava.png",
+      "remote": "https://www.themealdb.com/images/ingredients/cassava-small.png"
+    },
+    "sugar": {
+      "uri": "/food-images/sugar.png",
+      "remote": "https://www.themealdb.com/images/ingredients/sugar-small.png"
+    },
+    "soya_milk": {
+      "uri": "/food-images/soya_milk.png",
+      "remote": "https://www.themealdb.com/images/ingredients/soya_milk-small.png"
+    },
+    "rendang": {
+      "uri": "/food-images/rendang.jpg",
+      "remote": "https://www.themealdb.com/images/media/meals/bc8v651619789840.jpg/small"
+    }
+  }
+}

@@ -10,20 +10,31 @@ import {
   ViewStyle,
   TextInputProps,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import {
+  MOBILE_WIDTH,
+  TAB_BAR_HEIGHT,
+  TAB_BAR_GAP,
+  useKeyboardVisible,
+} from "../lib/mobile-layout";
 import Svg, { Circle, Path, Ellipse } from "react-native-svg";
 export const C = {
   bg: "#FFF9F4",
   ink: "#343C35",
-  muted: "#85887B",
+  muted: "#65705F",
   line: "#EAE8DF",
   green: "#426C50",
   mint: "#E7EFDF",
   pink: "#F8E4E5",
-  rose: "#B9707B",
+  rose: "#995363",
   peach: "#F6E8D3",
-  white: "#FFFFFF",
+  white: "#FFFDFC",
 };
 export function Txt({
   children,
@@ -54,46 +65,99 @@ export function Txt({
     </Text>
   );
 }
+// Horizontal rhythm tuned for 390–430pt wide phones (iPhone 11–15 Pro Max).
+export const PAGE_PAD = 20;
+export const CARD_PAD = 18;
 export function Page({
   children,
   refresh,
-  bottom = 28,
+  bottom = 24,
+  center = false,
+  tabs = false,
+  footer,
+  resetKey,
 }: {
   children: React.ReactNode;
   refresh?: () => Promise<void>;
   bottom?: number;
+  center?: boolean;
+  tabs?: boolean;
+  footer?: React.ReactNode;
+  resetKey?: string | number;
 }) {
   const [refreshing, setRefreshing] = React.useState(false);
+  const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardVisible();
+  const scroll = React.useRef<ScrollView>(null);
+  React.useEffect(() => {
+    scroll.current?.scrollTo({ y: 0, animated: false });
+  }, [resetKey]);
+  const bottomSpace =
+    tabs && !keyboard
+      ? TAB_BAR_HEIGHT + TAB_BAR_GAP + Math.max(insets.bottom, 12) + 20
+      : footer
+        ? 20
+        : bottom + insets.bottom;
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: C.bg }}
       edges={["top", "left", "right"]}
     >
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{
-          padding: 24,
-          paddingBottom: bottom,
-          width: "100%",
-          maxWidth: 650,
-          alignSelf: "center",
-          gap: 22,
-        }}
-        refreshControl={
-          refresh ? (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true);
-                refresh().finally(() => setRefreshing(false));
-              }}
-              tintColor={C.green}
-            />
-          ) : undefined
-        }
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {children}
-      </ScrollView>
+        <ScrollView
+          ref={scroll}
+          testID="page-scroll"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: PAGE_PAD,
+            paddingTop: 18,
+            paddingBottom: bottomSpace,
+            width: "100%",
+            maxWidth: MOBILE_WIDTH,
+            alignSelf: "center",
+            gap: 20,
+            ...(center ? { flexGrow: 1, justifyContent: "center" } : {}),
+          }}
+          refreshControl={
+            refresh ? (
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => {
+                  setRefreshing(true);
+                  refresh().finally(() => setRefreshing(false));
+                }}
+                tintColor={C.green}
+              />
+            ) : undefined
+          }
+        >
+          {children}
+        </ScrollView>
+        {!!footer && (
+          <View
+            testID="page-actions"
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: C.line,
+              backgroundColor: C.bg,
+              paddingHorizontal: PAGE_PAD,
+              paddingTop: 12,
+              paddingBottom: keyboard ? 12 : Math.max(insets.bottom, 12) + 8,
+              width: "100%",
+              maxWidth: MOBILE_WIDTH,
+              alignSelf: "center",
+              gap: 8,
+            }}
+          >
+            {footer}
+          </View>
+        )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -111,8 +175,8 @@ export function Card({
       style={[
         {
           backgroundColor: color,
-          borderRadius: 26,
-          padding: 22,
+          borderRadius: 22,
+          padding: CARD_PAD,
           borderWidth: 1,
           borderColor: color === C.white ? C.line : color,
           gap: 12,
@@ -148,27 +212,29 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={title}
       disabled={disabled || loading}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
       onPress={onPress}
       style={({ pressed }) => ({
         backgroundColor: bg,
         paddingVertical: 15,
         paddingHorizontal: 18,
-        borderRadius: 18,
+        borderRadius: 16,
         alignItems: "center",
         justifyContent: "center",
         minHeight: 52,
-        opacity: disabled ? 0.45 : pressed ? 0.7 : 1,
+        opacity: disabled ? 0.45 : pressed ? 0.8 : 1,
       })}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "primary" ? "white" : C.green} />
+        <ActivityIndicator color={variant === "primary" ? C.white : C.green} />
       ) : (
         <Txt
           bold
           color={
             variant === "primary"
-              ? "white"
+              ? C.white
               : variant === "danger"
                 ? C.rose
                 : C.green
@@ -180,30 +246,157 @@ export function Button({
     </Pressable>
   );
 }
-export function Field({ label, ...props }: TextInputProps & { label: string }) {
+export function Field({
+  label,
+  containerStyle,
+  ...props
+}: TextInputProps & { label: string; containerStyle?: ViewStyle }) {
+  const [focused, setFocused] = React.useState(false);
   return (
-    <View style={{ gap: 7, flex: 1, minWidth: 0 }}>
-      <Txt size={12} bold color={C.muted}>
+    <View
+      style={[
+        { gap: 7, flex: 1, minWidth: 0 },
+        containerStyle,
+      ]}
+    >
+      <Txt size={13} bold color={C.muted}>
         {label}
       </Txt>
       <TextInput
         accessibilityLabel={label}
-        placeholderTextColor="#9B9D93"
+        placeholderTextColor="#788171"
+        returnKeyType={props.multiline ? "default" : "done"}
         {...props}
+        onFocus={(event) => {
+          setFocused(true);
+          props.onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          props.onBlur?.(event);
+        }}
         style={[
           {
             borderWidth: 1,
-            borderColor: C.line,
-            borderRadius: 15,
+            borderColor: focused ? C.green : C.line,
+            borderRadius: 14,
             padding: 14,
-            minHeight: 50,
+            minHeight: 52,
             color: C.ink,
             backgroundColor: C.white,
             fontFamily: "Nunito_600SemiBold",
             fontSize: 16,
           },
+          props.multiline
+            ? { minHeight: 88, textAlignVertical: "top", lineHeight: 22 }
+            : null,
           props.style,
         ]}
+      />
+    </View>
+  );
+}
+export function Toggle({
+  accessibilityLabel,
+  value,
+  onValueChange,
+  disabled = false,
+}: {
+  accessibilityLabel: string;
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ checked: value, disabled }}
+      disabled={disabled}
+      onPress={() => onValueChange(!value)}
+      style={({ pressed }) => ({
+        width: 54,
+        minHeight: 44,
+        alignItems: "center",
+        justifyContent: "center",
+        opacity: disabled ? 0.5 : pressed ? 0.7 : 1,
+      })}
+    >
+      <View
+        style={{
+          width: 50,
+          height: 30,
+          borderRadius: 15,
+          backgroundColor: value ? C.green : "#798473",
+          padding: 3,
+        }}
+      >
+        <View
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            backgroundColor: C.white,
+            alignSelf: value ? "flex-end" : "flex-start",
+          }}
+        />
+      </View>
+    </Pressable>
+  );
+}
+export function DateField({
+  label,
+  value,
+  onChangeText,
+  editable = true,
+  min,
+  max,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  editable?: boolean;
+  min?: string;
+  max?: string;
+}) {
+  if (Platform.OS !== "web")
+    return (
+      <Field
+        label={label}
+        value={value}
+        onChangeText={onChangeText}
+        editable={editable}
+        placeholder="YYYY-MM-DD"
+        maxLength={10}
+      />
+    );
+  return (
+    <View style={{ gap: 7, minWidth: 0 }}>
+      <Txt size={13} bold color={C.muted}>
+        {label}
+      </Txt>
+      <input
+        type="date"
+        aria-label={label}
+        value={value}
+        min={min}
+        max={max}
+        disabled={!editable}
+        onChange={(event) => onChangeText(event.target.value)}
+        style={{
+          boxSizing: "border-box",
+          width: "100%",
+          minWidth: 0,
+          minHeight: 52,
+          padding: 14,
+          border: `1px solid ${C.line}`,
+          borderRadius: 14,
+          color: C.ink,
+          background: C.white,
+          fontFamily: "Nunito_600SemiBold",
+          fontSize: 16,
+          colorScheme: "light",
+        }}
       />
     </View>
   );
@@ -212,27 +405,35 @@ export function Chip({
   title,
   selected,
   onPress,
+  style,
 }: {
   title: string;
   selected?: boolean;
   onPress: () => void;
+  style?: ViewStyle;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={title}
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={{
-        paddingHorizontal: 16,
-        paddingVertical: 11,
-        minHeight: 44,
-        borderRadius: 99,
-        backgroundColor: selected ? C.green : C.white,
-        borderWidth: 1,
-        borderColor: selected ? C.green : C.line,
-      }}
+      style={[
+        {
+          paddingHorizontal: 16,
+          paddingVertical: 11,
+          minHeight: 44,
+          borderRadius: 99,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: selected ? C.green : C.white,
+          borderWidth: 1,
+          borderColor: selected ? C.green : C.line,
+        },
+        style,
+      ]}
     >
-      <Txt size={13} bold color={selected ? "white" : C.muted}>
+      <Txt size={13} bold color={selected ? C.white : C.muted}>
         {title}
       </Txt>
     </Pressable>
@@ -270,14 +471,15 @@ export function Notice({
 }) {
   return text ? (
     <View
-      accessibilityRole="alert"
+      accessibilityRole={error ? "alert" : undefined}
+      accessibilityLiveRegion="polite"
       style={{
         padding: 15,
         borderRadius: 16,
         backgroundColor: error ? C.pink : C.mint,
       }}
     >
-      <Txt size={13} color={error ? "#8F3D4A" : C.green}>
+      <Txt size={14} color={error ? "#8F3D4A" : C.green}>
         {text}
       </Txt>
     </View>
@@ -295,11 +497,11 @@ export function Heading({
   return (
     <View style={{ gap: 6 }}>
       {!!eyebrow && (
-        <Txt size={11} bold color={C.green} style={{ letterSpacing: 2 }}>
+        <Txt size={12} bold color={C.green} style={{ letterSpacing: 1.2 }}>
           {eyebrow.toUpperCase()}
         </Txt>
       )}
-      <Txt size={30} bold>
+      <Txt size={29} bold accessibilityRole="header">
         {title}
       </Txt>
       {!!subtitle && <Txt color={C.muted}>{subtitle}</Txt>}
@@ -348,6 +550,9 @@ export function Icon({
     plus: "M12 5v14M5 12h14",
     heart: "M12 21 3 12C-2 5 7 0 12 7c5-7 14-2 9 5Z",
     back: "m15 5-7 7 7 7",
+    next: "m9 5 7 7-7 7",
+    check: "m5 12 4 4L19 6",
+    image: "M3 3h18v18H3Zm0 14 6-6 4 4 3-3 5 5M8 7h.01",
   };
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">

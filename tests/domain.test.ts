@@ -12,7 +12,7 @@ import {
   Meal,
   validateProfile,
 } from "../src/lib/domain";
-import { parseAnalysis, endpoint } from "../src/lib/ai";
+import { parseAnalysis } from "../src/lib/ai";
 import { foods } from "../src/data/foods";
 const meal = (date: string): Meal => ({
   id: Math.random().toString(),
@@ -41,13 +41,6 @@ test("AI parser accepts fenced JSON and rejects negative calories/non-food schem
   );
   assert.throws(() => parseAnalysis('{"items":[{"name":"nasi"}]}'));
   assert.deepEqual(parseAnalysis('{"items":[]}').items, []);
-});
-test("AI endpoint enforces HTTPS and normalizes v1 suffix", () => {
-  assert.equal(
-    endpoint("https://ai.example.com/v1/"),
-    "https://ai.example.com",
-  );
-  assert.throws(() => endpoint("http://ai.example.com"));
 });
 test("streak tolerates unfinished today, requires two meals, breaks on missing day", () => {
   const meals = [

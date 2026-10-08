@@ -1,0 +1,6 @@
+[
+ {"profile":{"birthDate":"2000-01-01","sex":"male","height":170,"weight":70,"targetWeight":65,"activity":1.375},"day":"2026-10-08","expected":{"age":26,"bmr":1638,"maintenance":2252,"calorieTarget":1914,"adjustment":-338,"goal":"lose","floorApplied":false}},
+ {"profile":{"birthDate":"2000-10-09","sex":"female","height":160,"weight":60,"targetWeight":60,"activity":1.55},"day":"2026-10-08","expected":{"age":25,"bmr":1314,"maintenance":2037,"calorieTarget":2037,"adjustment":0,"goal":"maintain","floorApplied":false}},
+ {"profile":{"birthDate":"2000-10-08","sex":"female","height":160,"weight":60,"targetWeight":62,"activity":1.55},"day":"2026-10-08","expected":{"age":26,"bmr":1309,"maintenance":2029,"calorieTarget":2279,"adjustment":250,"goal":"gain","floorApplied":false}},
+ {"profile":{"birthDate":"1950-01-01","sex":"female","height":150,"weight":50,"targetWeight":48,"activity":1.2},"day":"2026-10-08","expected":{"age":76,"bmr":897,"maintenance":1076,"calorieTarget":1200,"adjustment":124,"goal":"lose","floorApplied":true}}
+]

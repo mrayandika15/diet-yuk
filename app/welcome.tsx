@@ -1,108 +1,104 @@
 import { useState } from "react";
-import { View, Pressable } from "react-native";
-import { Redirect } from "expo-router";
+import { View } from "react-native";
+import { Redirect, useLocalSearchParams } from "expo-router";
 import { useApp } from "../src/state/AppContext";
-import { people, Person } from "../src/lib/personal";
 import {
   Page,
-  Card,
   Txt,
   Button,
   Notice,
   Mascots,
   C,
+  Icon,
+  Row,
 } from "../src/components/ui";
 
 export default function Welcome() {
   const app = useApp();
-  const [chosen, setChosen] = useState<Person | null>(app.selectedPerson);
+  const params = useLocalSearchParams<{
+    error?: string;
+    error_description?: string;
+  }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  if (app.session || app.local)
+  if (app.session)
     return <Redirect href={app.profile.name ? "/" : "/profile"} />;
-
   async function start() {
-    if (!chosen || busy) return;
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
-      await app.choosePerson(chosen);
+      await app.signInWithGoogle();
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
       setBusy(false);
     }
   }
-
   return (
-    <Page>
-      <View style={{ paddingTop: 24, alignItems: "center", gap: 14 }}>
-        <Txt bold size={12} color={C.green} style={{ letterSpacing: 3 }}>
-          RAKA & ANGGUN
-        </Txt>
-        <Mascots />
-        <Txt bold size={32}>
-          Ini HP siapa?
-        </Txt>
-        <Txt color={C.muted} style={{ textAlign: "center" }}>
-          Pilih namamu, lalu lengkapi bio.{"\n"}Cukup sekali di perangkat ini.
-        </Txt>
-      </View>
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        {people.map((name) => (
-          <Pressable
-            key={name}
-            accessibilityRole="button"
-            accessibilityLabel={"Pilih " + name}
-            accessibilityState={{ selected: chosen === name }}
-            disabled={busy}
-            onPress={() => setChosen(name)}
-            style={{ flex: 1 }}
+    <Page
+      center
+      footer={
+        <>
+          <Notice
+            text={
+              error ||
+              app.error ||
+              (params.error
+                ? "Login belum berhasil. Coba lagi dengan akun Google yang terdaftar."
+                : "")
+            }
+            error
+          />
+          <Button
+            title="Masuk dengan Google"
+            onPress={() => void start()}
+            loading={busy}
+          />
+          <Txt size={12} color={C.muted} style={{ textAlign: "center" }}>
+            Khusus akun Raka & Anggun.
+          </Txt>
+        </>
+      }
+    >
+      <View style={{ gap: 28 }}>
+        <View style={{ alignItems: "center", gap: 24 }}>
+          <Txt size={12} bold color={C.green} style={{ letterSpacing: 2 }}>
+            RAKA & ANGGUN
+          </Txt>
+          <View
+            style={{
+              width: 190,
+              height: 160,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: C.mint,
+              borderRadius: 48,
+            }}
           >
-            <Card
-              color={chosen === name ? C.mint : C.white}
-              style={{
-                alignItems: "center",
-                paddingVertical: 28,
-                borderColor: chosen === name ? C.green : C.line,
-                borderWidth: 2,
-              }}
-            >
-              <View
-                style={{
-                  width: 54,
-                  height: 54,
-                  borderRadius: 27,
-                  backgroundColor: name === "Raka" ? C.peach : C.pink,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Txt bold size={26}>
-                  {name[0]}
-                </Txt>
-              </View>
-              <Txt bold size={21}>
-                {name}
-              </Txt>
-              <Txt size={12} color={C.green}>
-                {chosen === name ? "Dipilih ✓" : "Pilih profil"}
-              </Txt>
-            </Card>
-          </Pressable>
-        ))}
+            <Mascots />
+          </View>
+        </View>
+        <View style={{ gap: 10 }}>
+          <Txt bold size={36} accessibilityRole="header">
+            Sehat bareng,{"\n"}satu hari lagi.
+          </Txt>
+          <Txt size={16} color={C.muted}>
+            Foto makananmu, kenali kebutuhan tubuh, dan saling dukung sampai
+            hari kita.
+          </Txt>
+        </View>
+        <View style={{ gap: 14 }}>
+          <Row style={{ justifyContent: "flex-start" }}>
+            <Icon name="camera" size={20} />
+            <Txt size={14}>Catat dari foto, cek porsinya.</Txt>
+          </Row>
+          <Row style={{ justifyContent: "flex-start" }}>
+            <Icon name="heart" size={20} />
+            <Txt size={14}>Jalani prosesnya berdua.</Txt>
+          </Row>
+        </View>
       </View>
-      <Notice text={error || app.error} error />
-      <Button
-        title={chosen ? "Lanjut sebagai " + chosen : "Pilih nama dulu"}
-        onPress={() => void start()}
-        disabled={!chosen || busy}
-        loading={busy}
-      />
-      <Txt size={12} color={C.muted} style={{ textAlign: "center" }}>
-        Pilihanmu diingat di browser ini. Bio dan catatan disimpan ke akun
-        perangkatmu.
-      </Txt>
     </Page>
   );
 }

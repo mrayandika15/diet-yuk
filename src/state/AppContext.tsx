@@ -19,8 +19,6 @@ import {
   dayKey,
   total,
 } from "../lib/domain";
-import { AISettings } from "../lib/ai";
-import { getToken, setToken } from "../lib/secrets";
 import { File, Paths } from "expo-file-system";
 import { Platform, AppState } from "react-native";
 import { isPerson, Person } from "../lib/personal";
@@ -28,8 +26,8 @@ import {
   connectionError,
   devicePersonKey,
   profileCacheKey,
-  restorePerson,
 } from "../lib/device-profile";
+import { googlePerson, accessDeniedMessage } from "../lib/auth";
 type Data = {
   profile: Profile;
   meals: Meal[];
@@ -41,7 +39,7 @@ type Partner = {
   target: number;
   calories: number;
   coupleId: string;
-  inviteCode: string;
+  ready: boolean;
   weddingDate: string;
 };
 type Context = Data & {
@@ -51,18 +49,14 @@ type Context = Data & {
   error: string;
   partner: Partner | null;
   cheer: string;
-  ai: AISettings;
   selectedPerson: Person | null;
-  choosePerson: (name: Person) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   reload: () => Promise<void>;
-  enterLocal: () => Promise<void>;
   saveProfile: (p: Profile) => Promise<void>;
   saveMeal: (m: Meal) => Promise<void>;
   deleteMeal: (id: string) => Promise<void>;
   saveWeight: (w: WeightLog) => Promise<void>;
   toggleFavorite: (food: Food) => Promise<void>;
-  saveAI: (s: AISettings) => Promise<void>;
-  pair: (code?: string) => Promise<void>;
   sendCheer: (emoji: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -85,12 +79,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [partner, setPartner] = useState<Partner | null>(null);
   const [cheer, setCheer] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
-  const selecting = useRef(false);
-  const [ai, setAI] = useState<AISettings>({
-    url: process.env.EXPO_PUBLIC_AI_BASE_URL || "",
-    token: "",
-    mock: true,
-  });
   const owner = useRef("");
   const version = useRef(0);
   const dataRef = useRef(data);
@@ -180,7 +168,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPartner(coupleRes.data ?? null);
         setCheer(cheerRes.data?.[0]?.emoji ?? "");
         if (isPerson(profile.name)) {
-          setSelectedPerson(profile.name);
           await AsyncStorage.setItem(devicePersonKey, profile.name);
           await AsyncStorage.setItem(
             profileCacheKey(userId),
@@ -198,52 +185,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
   useEffect(() => {
     let mounted = true;
-    Promise.all([
-      AsyncStorage.getItem("diet-yuk:mode"),
-      AsyncStorage.getItem("diet-yuk:ai"),
-      getToken(),
-      supabase?.auth.getSession(),
-      AsyncStorage.getItem(devicePersonKey),
-    ])
-      .then(async ([mode, saved, token, result, savedPerson]) => {
-        if (!mounted) return;
-        check(result?.error);
-        if (saved) setAI({ ...JSON.parse(saved), token });
-        const sess = result?.data.session ?? null;
-        setSelectedPerson(
-          restorePerson(savedPerson, sess?.user.user_metadata.person),
-        );
-        const isLocal = !sess && mode === "local";
-        setSession(sess);
-        setLocal(isLocal);
-        owner.current = sess?.user.id ?? (isLocal ? "local" : "");
-        if (sess) {
-          const cached = await AsyncStorage.getItem(
-            profileCacheKey(sess.user.id),
-          );
-          if (!mounted) return;
-          if (cached) setData({ ...empty(), profile: JSON.parse(cached) });
-        }
-        if (owner.current) void load(owner.current, isLocal).catch(() => {});
-        else setReady(true);
-      })
-      .catch((e) => {
-        setError(e.message);
-        setReady(true);
-      });
-    const subscription = supabase?.auth.onAuthStateChange((_event, sess) => {
+    let authRevision = 0;
+    async function applySession(sess: Session | null) {
       if (!mounted) return;
-      // Bootstrap and explicit device selection each load once themselves.
-      if (_event === "INITIAL_SESSION" || selecting.current) return;
-      setSession(sess);
-      if (sess && owner.current !== sess.user.id) {
-        owner.current = sess.user.id;
+      const person = googlePerson(sess?.user);
+      if (sess && !person) {
+        version.current++;
+        owner.current = "";
+        setSession(null);
+        setSelectedPerson(null);
         setLocal(false);
+        setData(empty());
+        setPartner(null);
+        setCheer("");
+        setError(accessDeniedMessage);
+        setReady(true);
+        await supabase?.auth.signOut({ scope: "local" });
+        return;
+      }
+      setSession(sess);
+      setSelectedPerson(person);
+      setLocal(false);
+      if (sess) {
+        if (owner.current === sess.user.id) return;
+        owner.current = sess.user.id;
         setReady(false);
         setData(empty());
         setPartner(null);
-        setTimeout(() => void load(sess.user.id, false).catch(() => {}), 0);
-      } else if (!sess && owner.current && owner.current !== "local") {
+        setCheer("");
+        await load(sess.user.id, false).catch(() => {});
+      } else {
         owner.current = "";
         version.current++;
         setData(empty());
@@ -251,7 +222,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setCheer("");
         setReady(true);
       }
+    }
+    // Do not await Supabase methods inside its auth callback (auth lock).
+    const subscription = supabase?.auth.onAuthStateChange((event, sess) => {
+      if (event === "INITIAL_SESSION") return;
+      const revision = ++authRevision;
+      setTimeout(() => {
+        if (mounted && revision === authRevision) void applySession(sess);
+      }, 0);
     });
+    const initialRevision = authRevision;
+    Promise.all([
+      supabase?.auth.getSession(),
+      AsyncStorage.removeItem("diet-yuk:mode"),
+    ])
+      .then(async ([result]) => {
+        if (!mounted) return;
+        check(result?.error);
+        if (initialRevision === authRevision)
+          await applySession(result?.data.session ?? null);
+      })
+      .catch((e) => {
+        if (!mounted) return;
+        setError(e.message);
+        setReady(true);
+      });
     return () => {
       mounted = false;
       version.current++;
@@ -294,50 +289,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dataRef.current = next;
     setData(next);
   }
-  async function enterLocal() {
-    if (session) throw Error("Keluar dari akun sebelum masuk mode lokal.");
-    await AsyncStorage.setItem("diet-yuk:mode", "local");
-    owner.current = "local";
-    setLocal(true);
-    setReady(false);
-    await load("local", true);
-  }
-  async function choosePerson(name: Person) {
-    if (!isPerson(name)) throw Error("Pilih Raka atau Anggun.");
-    if (selecting.current) return;
-    selecting.current = true;
-    try {
-      if (!supabase) throw Error("Koneksi Supabase belum dikonfigurasi.");
-      const restored = await supabase.auth.getSession();
-      check(restored.error);
-      const known = restored.data.session?.user.user_metadata.person;
-      if (isPerson(known) && known !== name)
-        throw Error("Perangkat ini sudah terhubung sebagai " + known + ".");
-      await AsyncStorage.setItem(devicePersonKey, name);
-      setSelectedPerson(name);
-      if (restored.data.session) {
-        setReady(false);
-        setSession(restored.data.session);
-        setLocal(false);
-        owner.current = restored.data.session.user.id;
-        await load(owner.current, false);
-      } else {
-        const result = await supabase.auth.signInAnonymously({
-          options: { data: { person: name } },
-        });
-        check(result.error);
-        if (!result.data.session)
-          throw Error("Sesi perangkat belum tersimpan. Coba lagi.");
-        setReady(false);
-        setSession(result.data.session);
-        setLocal(false);
-        owner.current = result.data.session.user.id;
-        await load(owner.current, false);
-      }
-      await AsyncStorage.removeItem("diet-yuk:mode");
-    } finally {
-      selecting.current = false;
-    }
+  async function signInWithGoogle() {
+    if (!supabase) throw Error("Koneksi Supabase belum dikonfigurasi.");
+    if (Platform.OS !== "web")
+      throw Error("Buka Diet Yuk melalui browser untuk masuk dengan Google.");
+    setError("");
+    const result = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin + "/welcome",
+        queryParams: { prompt: "select_account" },
+      },
+    });
+    check(result.error);
   }
   async function saveProfile(profile: Profile) {
     if (local) return persist({ ...dataRef.current, profile });
@@ -356,7 +320,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       profileCacheKey(session.user.id),
       JSON.stringify(profile),
     );
-    if (isPerson(profile.name)) setSelectedPerson(profile.name);
     if (partner)
       check(
         (
@@ -486,29 +449,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
     await reload();
   }
-  async function saveAI(settings: AISettings) {
-    await setToken(settings.token);
-    await AsyncStorage.setItem(
-      "diet-yuk:ai",
-      JSON.stringify({ url: settings.url, mock: settings.mock }),
-    );
-    setAI(settings);
-  }
-  async function pair(code?: string) {
-    if (local || !supabase)
-      throw Error("Hubungkan Supabase dan masuk ke akun untuk pairing.");
-    check(
-      (
-        await supabase.rpc(
-          code ? "join_couple" : "create_couple",
-          code
-            ? { code: code.trim().toUpperCase() }
-            : { wedding: data.profile.weddingDate },
-        )
-      ).error,
-    );
-    await reload();
-  }
   async function toggleFavorite(food: Food) {
     foodSchema.parse(food);
     const exists = dataRef.current.favorites.some((f) => f.name === food.name);
@@ -542,6 +482,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     version.current++;
     owner.current = "";
     setSession(null);
+    setSelectedPerson(null);
+    setError("");
     setLocal(false);
     setPartner(null);
     setCheer("");
@@ -557,18 +499,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         error,
         partner,
         cheer,
-        ai,
         selectedPerson,
-        choosePerson,
+        signInWithGoogle,
         reload,
-        enterLocal,
         saveProfile,
         saveMeal,
         deleteMeal,
         saveWeight,
         toggleFavorite,
-        saveAI,
-        pair,
         sendCheer,
         signOut,
       }}

@@ -10,6 +10,8 @@ export const mealLabels: Record<MealType, string> = {
 export type Profile = {
   name: string;
   bio?: string;
+  requiresClinicalPlan?: boolean;
+  caloriePlan?: import("./calorie-plan").CaloriePlan;
   sex: "male" | "female";
   birthDate: string;
   height: number;
@@ -39,11 +41,58 @@ export const foodSchema = z.object({
   carbs_g: z.number().nonnegative().max(3000),
   fat_g: z.number().nonnegative().max(3000),
   confidence: z.number().min(0).max(1).optional(),
+  image_url: z
+    .string()
+    .max(700)
+    .refine((value) => {
+      if (/^\/food-images\/[a-z0-9_-]+\.(png|jpg)$/.test(value)) return true;
+      try {
+        const url = new URL(value);
+        return (
+          url.protocol === "https:" &&
+          url.hostname === "www.themealdb.com" &&
+          /^\/images\/(ingredients|media\/meals)\//.test(url.pathname)
+        );
+      } catch {
+        return false;
+      }
+    }, "Sumber gambar tidak valid")
+    .optional(),
+  image_source: z.literal("TheMealDB").optional(),
 });
-export const analysisSchema = z.object({
-  items: z.array(foodSchema).max(30),
-  notes: z.string().max(6000).default(""),
-});
+export const foodQuestionSchema = z
+  .object({
+    id: z.string().regex(/^[a-zA-Z0-9_-]{1,40}$/),
+    item_index: z.number().int().nonnegative().max(29),
+    kind: z.enum(["egg_type", "preparation", "ingredients"]),
+    text: z.string().trim().min(1).max(240),
+    options: z
+      .array(
+        z.object({
+          id: z.string().regex(/^[a-zA-Z0-9_-]{1,40}$/),
+          label: z.string().trim().min(1).max(80),
+        }),
+      )
+      .min(2)
+      .max(4),
+  })
+  .refine(
+    (q) => new Set(q.options.map((o) => o.id)).size === q.options.length,
+    "Pilihan harus unik",
+  );
+export type FoodQuestion = z.infer<typeof foodQuestionSchema>;
+export const analysisSchema = z
+  .object({
+    items: z.array(foodSchema).max(30),
+    notes: z.string().max(6000).default(""),
+    questions: z.array(foodQuestionSchema).max(3).default([]),
+  })
+  .refine(
+    (a) =>
+      a.questions.every((q) => q.item_index < a.items.length) &&
+      new Set(a.questions.map((q) => q.id)).size === a.questions.length,
+    "Pertanyaan belum sesuai makanan",
+  );
 export type Food = z.infer<typeof foodSchema> & {
   source?: "ai" | "manual" | "reference" | "tkpi";
 };

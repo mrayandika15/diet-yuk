@@ -1,6 +1,6 @@
 module.exports = {
   globDirectory: "dist",
-  globPatterns: ["**/*.{html,js,css,json,ico,svg,png,ttf}"],
+  globPatterns: ["**/*.{html,js,css,json,ico,svg,png,jpg,jpeg,ttf}"],
   globIgnores: ["sw.js", "workbox-*.js"],
   maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
   swDest: "dist/sw.js",

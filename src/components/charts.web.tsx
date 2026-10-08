@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { useWindowDimensions, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { AccessibilityInfo, View } from "react-native";
 import {
   Area,
   AreaChart,
@@ -17,6 +17,27 @@ import {
 } from "recharts";
 import { C, Txt } from "./ui";
 
+function useChartLayout() {
+  const [width, setWidth] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(true);
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(setReduceMotion)
+      .catch(() => {});
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduceMotion,
+    );
+    return () => subscription.remove();
+  }, []);
+  return {
+    width,
+    reduceMotion,
+    onLayout: (event: import("react-native").LayoutChangeEvent) =>
+      setWidth(Math.floor(event.nativeEvent.layout.width)),
+  };
+}
+
 const tooltipStyle = {
   border: `1px solid ${C.line}`,
   borderRadius: 14,
@@ -29,10 +50,13 @@ const tooltipStyle = {
 export function CalorieDonut({
   value,
   target,
+  size = 172,
 }: {
   value: number;
   target: number;
+  size?: number;
 }) {
+  const { reduceMotion } = useChartLayout();
   const safeTarget = Math.max(1, target);
   const percent = Math.min(100, Math.round((value / safeTarget) * 100));
   const consumed = Math.min(value, safeTarget);
@@ -48,15 +72,15 @@ export function CalorieDonut({
       <View
         accessibilityLabel={`${Math.round(value)} dari ${target} kilokalori`}
         style={{
-          width: 222,
-          height: 222,
+          width: size,
+          height: size,
           position: "relative",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
         <div aria-hidden="true" style={{ position: "absolute", inset: 0 }}>
-          <PieChart width={222} height={222}>
+          <PieChart width={size} height={size}>
             <defs>
               <linearGradient id="calorieProgress" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor={over ? "#D59099" : "#77A081"} />
@@ -70,13 +94,13 @@ export function CalorieDonut({
               cy="50%"
               startAngle={90}
               endAngle={-270}
-              innerRadius={78}
-              outerRadius={101}
+              innerRadius={size * 0.37}
+              outerRadius={size * 0.47}
               paddingAngle={1.5}
               cornerRadius={11}
               stroke="none"
-              isAnimationActive
-              animationDuration={700}
+              isAnimationActive={!reduceMotion}
+              animationDuration={250}
               animationEasing="ease-out"
             >
               <Cell fill="url(#calorieProgress)" />
@@ -88,23 +112,23 @@ export function CalorieDonut({
           pointerEvents="none"
           style={{ alignItems: "center", justifyContent: "center", gap: 2 }}
         >
-          <Txt bold size={38}>
+          <Txt bold size={30} style={{ fontVariant: ["tabular-nums"] }}>
             {Math.round(value).toLocaleString("id-ID")}
           </Txt>
-          <Txt size={11} color={C.muted}>
-            dari {target.toLocaleString("id-ID")} kkal
+          <Txt size={12} color={C.muted}>
+            kkal tercatat
           </Txt>
           <View
             style={{
-              marginTop: 8,
+              marginTop: 4,
               borderRadius: 99,
               paddingHorizontal: 10,
-              paddingVertical: 5,
+              paddingVertical: 3,
               backgroundColor: over ? C.pink : C.mint,
             }}
           >
-            <Txt size={10} bold color={over ? C.rose : C.green}>
-              {over ? "TARGET TERLEWATI" : `${percent}% TARGET`}
+            <Txt size={11} bold color={over ? C.rose : C.green}>
+              {over ? "TERLEWATI" : `${percent}%`}
             </Txt>
           </View>
         </View>
@@ -118,12 +142,11 @@ export function CaloriesBarChart({
   labels,
   target,
 }: {
-  values: number[];
+  values: (number | null)[];
   labels: string[];
   target: number;
 }) {
-  const { width } = useWindowDimensions();
-  const chartWidth = Math.max(260, Math.min(width - 92, 520));
+  const { width: chartWidth, onLayout, reduceMotion } = useChartLayout();
   const data = useMemo(
     () =>
       values.map((value, index) => ({
@@ -132,7 +155,7 @@ export function CaloriesBarChart({
         fill:
           index === values.length - 1
             ? C.green
-            : value > target
+            : value !== null && value > target
               ? C.rose
               : "#B9CCB1",
       })),
@@ -140,48 +163,73 @@ export function CaloriesBarChart({
   );
 
   return (
-    <View style={{ width: "100%", height: 190 }}>
-      <BarChart
-        width={chartWidth}
-        height={190}
-        data={data}
-        margin={{ top: 12, right: 4, left: -28, bottom: 0 }}
-      >
-        <CartesianGrid
-          vertical={false}
-          stroke="#ECECE4"
-          strokeDasharray="4 5"
-        />
-        <XAxis
-          dataKey="label"
-          axisLine={false}
-          tickLine={false}
-          tick={{
-            fill: C.muted,
-            fontSize: 10,
-            fontFamily: "Nunito_600SemiBold",
-          }}
-        />
-        <YAxis
-          axisLine={false}
-          tickLine={false}
-          tick={{ fill: C.muted, fontSize: 9 }}
-        />
-        <Tooltip
-          cursor={{ fill: "rgba(66,108,80,0.06)", radius: 8 }}
-          contentStyle={tooltipStyle}
-          formatter={(amount) => [
-            `${Math.round(Number(amount)).toLocaleString("id-ID")} kkal`,
-            "Kalori",
-          ]}
-        />
-        <ReferenceLine y={target} stroke="#9EAA97" strokeDasharray="5 5" />
-        <Bar dataKey="value" radius={[8, 8, 8, 8]} maxBarSize={28}>
-          {data.map((item) => (
-            <Cell key={item.label} fill={item.fill} />
-          ))}
-        </Bar>
-      </BarChart>
+    <View onLayout={onLayout} style={{ width: "100%", height: 190 }}>
+      {chartWidth > 0 && (
+        <BarChart
+          width={chartWidth}
+          height={190}
+          data={data}
+          margin={{ top: 12, right: 4, left: -28, bottom: 0 }}
+        >
+          <CartesianGrid
+            vertical={false}
+            stroke="#ECECE4"
+            strokeDasharray="4 5"
+          />
+          <XAxis
+            dataKey="label"
+            axisLine={false}
+            tickLine={false}
+            interval="preserveStartEnd"
+            tick={{
+              fill: C.muted,
+              fontSize: 11,
+              fontFamily: "Nunito_600SemiBold",
+            }}
+          />
+          <YAxis
+            domain={[
+              0,
+              Math.ceil(
+                Math.max(target, ...values.map((value) => value ?? 0), 1) / 200,
+              ) * 200,
+            ]}
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: C.muted, fontSize: 11 }}
+          />
+          <Tooltip
+            cursor={{ fill: "rgba(66,108,80,0.06)", radius: 8 }}
+            contentStyle={tooltipStyle}
+            formatter={(amount) => [
+              `${Math.round(Number(amount)).toLocaleString("id-ID")} kkal`,
+              "Kalori",
+            ]}
+          />
+          <ReferenceLine
+            y={target}
+            stroke="#9EAA97"
+            strokeDasharray="5 5"
+            label={{
+              value: "Target",
+              fill: C.green,
+              fontSize: 11,
+              position: "insideTopRight",
+            }}
+          />
+          <Bar
+            dataKey="value"
+            radius={[6, 6, 0, 0]}
+            maxBarSize={28}
+            isAnimationActive={!reduceMotion}
+            animationDuration={250}
+          >
+            {data.map((item, index) => (
+              <Cell key={index} fill={item.fill} />
+            ))}
+          </Bar>
+        </BarChart>
+      )}
     </View>
   );
 }
@@ -195,8 +243,7 @@ export function WeightLineChart({
   labels: string[];
   target: number;
 }) {
-  const { width } = useWindowDimensions();
-  const chartWidth = Math.max(260, Math.min(width - 92, 520));
+  const { width: chartWidth, onLayout, reduceMotion } = useChartLayout();
   const data = values.map((value, index) => ({
     label: labels[index],
     value,
@@ -205,67 +252,73 @@ export function WeightLineChart({
   const maximum = Math.max(target, ...values) + 1;
 
   return (
-    <View style={{ width: "100%", height: 190 }}>
-      <AreaChart
-        width={chartWidth}
-        height={190}
-        data={data}
-        margin={{ top: 14, right: 8, left: -25, bottom: 0 }}
-      >
-        <defs>
-          <linearGradient id="weightArea" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#82A789" stopOpacity={0.42} />
-            <stop offset="100%" stopColor="#82A789" stopOpacity={0.02} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid
-          vertical={false}
-          stroke="#E7ECE3"
-          strokeDasharray="4 5"
-        />
-        <XAxis
-          dataKey="label"
-          axisLine={false}
-          tickLine={false}
-          tick={{
-            fill: C.muted,
-            fontSize: 10,
-            fontFamily: "Nunito_600SemiBold",
-          }}
-        />
-        <YAxis
-          domain={[minimum, maximum]}
-          axisLine={false}
-          tickLine={false}
-          tick={{ fill: C.muted, fontSize: 9 }}
-        />
-        <Tooltip
-          contentStyle={tooltipStyle}
-          formatter={(amount) => [`${Number(amount).toFixed(1)} kg`, "Berat"]}
-        />
-        <ReferenceLine
-          y={target}
-          stroke="#91A484"
-          strokeDasharray="5 5"
-          label={{ value: "Target", fill: C.green, fontSize: 10 }}
-        />
-        <Area
-          type="monotone"
-          dataKey="value"
-          stroke="none"
-          fill="url(#weightArea)"
-          isAnimationActive
-        />
-        <Line
-          type="monotone"
-          dataKey="value"
-          stroke={C.green}
-          strokeWidth={3}
-          dot={{ fill: C.white, stroke: C.green, strokeWidth: 3, r: 4 }}
-          activeDot={{ fill: C.green, stroke: C.white, strokeWidth: 3, r: 6 }}
-          isAnimationActive
-        />
-      </AreaChart>
+    <View onLayout={onLayout} style={{ width: "100%", height: 190 }}>
+      {chartWidth > 0 && (
+        <AreaChart
+          width={chartWidth}
+          height={190}
+          data={data}
+          margin={{ top: 14, right: 8, left: -25, bottom: 0 }}
+        >
+          <defs>
+            <linearGradient id="weightArea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#82A789" stopOpacity={0.42} />
+              <stop offset="100%" stopColor="#82A789" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid
+            vertical={false}
+            stroke="#E7ECE3"
+            strokeDasharray="4 5"
+          />
+          <XAxis
+            dataKey="label"
+            axisLine={false}
+            tickLine={false}
+            padding={{ left: 8, right: 16 }}
+            interval="preserveStartEnd"
+            tick={{
+              fill: C.muted,
+              fontSize: 11,
+              fontFamily: "Nunito_600SemiBold",
+            }}
+          />
+          <YAxis
+            domain={[minimum, maximum]}
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: C.muted, fontSize: 11 }}
+          />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            formatter={(amount) => [`${Number(amount).toFixed(1)} kg`, "Berat"]}
+          />
+          <ReferenceLine
+            y={target}
+            stroke="#91A484"
+            strokeDasharray="5 5"
+            label={{ value: "Target", fill: C.green, fontSize: 11 }}
+          />
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke="none"
+            fill="url(#weightArea)"
+            isAnimationActive={!reduceMotion}
+            animationDuration={250}
+          />
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke={C.green}
+            strokeWidth={3}
+            dot={{ fill: C.white, stroke: C.green, strokeWidth: 3, r: 4 }}
+            activeDot={{ fill: C.green, stroke: C.white, strokeWidth: 3, r: 6 }}
+            isAnimationActive={!reduceMotion}
+            animationDuration={250}
+          />
+        </AreaChart>
+      )}
     </View>
   );
 }

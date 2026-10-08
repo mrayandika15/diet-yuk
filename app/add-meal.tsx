@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -11,15 +11,20 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { MOBILE_WIDTH, useKeyboardVisible } from "../src/lib/mobile-layout";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as Haptics from "expo-haptics";
-import { analyze } from "../src/lib/ai";
-import { foods } from "../src/data/foods";
+import { analyze, refineAnalysis } from "../src/lib/managed-ai";
+import { FoodImage, FoodImageCredit } from "../src/components/FoodImage";
+import { FoodQuestions } from "../src/components/FoodQuestions";
+import { FoodSearch } from "../src/components/FoodSearch";
+import { foodImage } from "../src/lib/food-images";
 import {
   Food,
+  FoodQuestion,
   Meal,
   MealType,
   dayKey,
@@ -33,7 +38,15 @@ import {
 } from "../src/lib/domain";
 import { matchReference } from "../src/lib/nutrition";
 import { useApp } from "../src/state/AppContext";
-import { Button, C, Field, Icon, Row, Txt } from "../src/components/ui";
+import {
+  Button,
+  C,
+  DateField,
+  Field,
+  Icon,
+  Row,
+  Txt,
+} from "../src/components/ui";
 
 type Step = 0 | 1 | 2;
 
@@ -96,10 +109,12 @@ function SmallIconButton({
 
 function FoodRow({
   food,
+  photo,
   onChange,
   onRemove,
 }: {
   food: Food;
+  photo?: string;
   onChange: (food: Food) => void;
   onRemove: () => void;
 }) {
@@ -127,23 +142,38 @@ function FoodRow({
       }}
     >
       <Row style={{ gap: 8 }}>
+        <FoodImage
+          name={food.name}
+          imageUrl={food.image_url}
+          fallbackUri={photo}
+        />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Txt bold numberOfLines={1}>
+          <Txt bold numberOfLines={2} size={15}>
             {food.name}
           </Txt>
-          <Txt size={11} color={C.muted}>
+          <Txt size={12} color={C.muted}>
             P {Math.round(food.protein_g)} · K {Math.round(food.carbs_g)} · L{" "}
             {Math.round(food.fat_g)} g
           </Txt>
         </View>
-        <Txt bold color={C.green}>
-          {Math.round(food.calories)} kkal
-        </Txt>
+        <View style={{ alignItems: "flex-end" }}>
+          <Txt bold size={15} color={C.green}>
+            {Math.round(food.calories)}
+          </Txt>
+          <Txt size={12} color={C.muted}>
+            kkal
+          </Txt>
+        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={"Hapus " + food.name}
           onPress={onRemove}
-          hitSlop={8}
+          style={{
+            width: 44,
+            height: 44,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
           <Txt bold color={C.rose}>
             ×
@@ -158,8 +188,8 @@ function FoodRow({
             onChange(resizeFood(food, Math.max(1, food.portion_g - 10)))
           }
           style={{
-            width: 32,
-            height: 32,
+            width: 44,
+            height: 44,
             borderRadius: 10,
             backgroundColor: C.mint,
             alignItems: "center",
@@ -176,8 +206,9 @@ function FoodRow({
           onSubmitEditing={commit}
           keyboardType="decimal-pad"
           style={{
-            width: 64,
-            height: 32,
+            width: 76,
+            height: 44,
+            fontSize: 16,
             borderWidth: 1,
             borderColor: C.line,
             borderRadius: 10,
@@ -196,8 +227,8 @@ function FoodRow({
             onChange(resizeFood(food, Math.min(10000, food.portion_g + 10)))
           }
           style={{
-            width: 32,
-            height: 32,
+            width: 44,
+            height: 44,
             borderRadius: 10,
             backgroundColor: C.mint,
             alignItems: "center",
@@ -212,11 +243,17 @@ function FoodRow({
 }
 
 export default function AddMeal() {
-  const params = useLocalSearchParams<{ id?: string; type?: MealType }>();
+  const params = useLocalSearchParams<{
+    id?: string;
+    type?: MealType;
+    photoOnly?: string;
+  }>();
   const app = useApp();
   const { width, height } = useWindowDimensions();
   const compact = height < 720;
+  const keyboard = useKeyboardVisible();
   const existing = app.meals.find((meal) => meal.id === params.id);
+  const photoOnly = !existing && params.photoOnly === "1";
   const id = useRef(existing?.id ?? uuid());
   const [step, setStep] = useState<Step>(existing ? 1 : 0);
   const [items, setItems] = useState<Food[]>(existing?.items ?? []);
@@ -229,7 +266,11 @@ export default function AddMeal() {
   const [busy, setBusy] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [manualMode, setManualMode] = useState(false);
-  const [query, setQuery] = useState("");
+  const [analysisJob, setAnalysisJob] = useState("");
+  const [questions, setQuestions] = useState<FoodQuestion[]>([]);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [confirmationDone, setConfirmationDone] = useState(false);
+  const confirming = step === 1 && questions.length > 0 && !confirmationDone;
   const [manual, setManual] = useState({
     name: "",
     portion_g: "100",
@@ -262,22 +303,19 @@ export default function AddMeal() {
   );
 
   const totals = total(items);
-  const results = useMemo(
-    () =>
-      foods
-        .filter((food) =>
-          food.name.toLowerCase().includes(query.trim().toLowerCase()),
-        )
-        .slice(0, query ? 20 : 8),
-    [query],
-  );
 
   function close() {
-    const changed = items.length > 0 || Boolean(photo);
-    if (changed && !existing) {
+    const changed = existing
+      ? JSON.stringify(items) !== JSON.stringify(existing.items) ||
+        date !== existing.date ||
+        type !== existing.type ||
+        note !== existing.note ||
+        photo !== existing.photo
+      : items.length > 0 || Boolean(photo);
+    if (changed) {
       if (Platform.OS === "web") {
         if (!window.confirm("Tutup tanpa menyimpan catatan ini?")) return;
-        router.replace("/");
+        router.replace(existing ? "/(tabs)/meals" : "/");
       } else {
         Alert.alert("Tutup catatan?", "Perubahan belum disimpan.", [
           { text: "Lanjut edit", style: "cancel" },
@@ -290,7 +328,7 @@ export default function AddMeal() {
       }
       return;
     }
-    router.replace("/");
+    router.replace(existing ? "/(tabs)/meals" : "/");
   }
 
   async function pick(camera: boolean) {
@@ -330,25 +368,63 @@ export default function AddMeal() {
     setError("");
     setBusy("Mengenali makanan…");
     try {
-      const data = await analyze(base64, app.ai);
+      const data = await analyze(base64);
       if (!data.items.length)
         throw Error("Makanan belum terdeteksi. Coba foto lain.");
       setItems(
-        data.items.map((food) =>
-          matchReference({
-            ...food,
-            source: app.ai.mock ? "reference" : "ai",
-          }),
-        ),
+        data.items.map((food, index) => {
+          const estimated: Food = { ...food, source: "ai" };
+          return data.questions.some((q) => q.item_index === index)
+            ? estimated
+            : matchReference(estimated);
+        }),
       );
       setNote(data.notes);
+      setAnalysisJob(data.jobId);
+      setQuestions(data.questions);
+      setAnswers({});
+      setConfirmationDone(false);
       setStep(1);
     } catch (reason) {
       const issue = reason as Error;
       setError(
         issue.name === "TimeoutError"
-          ? "Analisis terlalu lama. Coba lagi atau lanjut tanpa foto."
+          ? "Analisis terlalu lama. Silakan coba lagi."
           : issue.message,
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function confirmFoods() {
+    const selected = Object.fromEntries(
+      Object.entries(answers).filter(([, value]) => value !== "__unknown"),
+    );
+    if (!Object.keys(selected).length) {
+      setError("");
+      setConfirmationDone(true);
+      return;
+    }
+    setError("");
+    setBusy("Menyesuaikan estimasi…");
+    try {
+      const data = await refineAnalysis(analysisJob, selected);
+      // Keep previously displayed TKPI values for unanswered foods, and never
+      // undo a confirmed recipe by matching it to a generic reference.
+      const affected = new Set(
+        questions.filter((q) => selected[q.id]).map((q) => q.item_index),
+      );
+      setItems(
+        data.items.map((food, index) =>
+          affected.has(index) ? { ...food, source: "ai" } : items[index],
+        ),
+      );
+      setNote(data.notes);
+      setConfirmationDone(true);
+    } catch (reason) {
+      setError(
+        (reason as Error).message + " Kamu juga bisa melewati konfirmasi.",
       );
     } finally {
       setBusy("");
@@ -378,7 +454,7 @@ export default function AddMeal() {
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success,
         );
-      router.replace("/");
+      router.replace(existing ? "/(tabs)/meals" : "/");
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -391,7 +467,7 @@ export default function AddMeal() {
       setBusy("Menghapus…");
       try {
         await app.deleteMeal(id.current);
-        router.replace("/");
+        router.replace(existing ? "/(tabs)/meals" : "/");
       } catch (reason) {
         setError((reason as Error).message);
         setBusy("");
@@ -415,14 +491,21 @@ export default function AddMeal() {
   function addFood(food: Food) {
     setItems((current) => [...current, { ...food }]);
     setPickerOpen(false);
-    setQuery("");
     setError("");
   }
 
   function addManual() {
+    const illustration = foodImage(manual.name, Platform.OS !== "web");
+    if (!illustration && !photo) {
+      setError("Tambahkan foto untuk makanan ini terlebih dahulu.");
+      return;
+    }
     try {
       const food = foodSchema.parse({
         ...manual,
+        ...(illustration
+          ? { image_url: illustration, image_source: "TheMealDB" }
+          : {}),
         portion_g: Number(manual.portion_g.replace(",", ".")),
         calories: Number(manual.calories.replace(",", ".")),
         protein_g: Number(manual.protein_g.replace(",", ".")),
@@ -446,7 +529,19 @@ export default function AddMeal() {
     }
   }
 
-  const copy = stepCopy[step];
+  const copy = confirming
+    ? {
+        ...stepCopy[1],
+        title: "Konfirmasi sebentar",
+        body: "Opsional · agar estimasinya lebih sesuai makananmu.",
+      }
+    : existing && step === 1
+      ? {
+          ...stepCopy[step],
+          title: "Edit catatanmu",
+          body: "Sesuaikan makanan dan porsinya sebelum menyimpan.",
+        }
+      : stepCopy[step];
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
@@ -458,9 +553,9 @@ export default function AddMeal() {
           style={{
             flex: 1,
             width: "100%",
-            maxWidth: 620,
+            maxWidth: MOBILE_WIDTH,
             alignSelf: "center",
-            paddingHorizontal: width < 380 ? 12 : 18,
+            paddingHorizontal: 20,
             paddingVertical: compact ? 8 : 14,
             gap: compact ? 9 : 13,
           }}
@@ -468,14 +563,18 @@ export default function AddMeal() {
           <Row>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={step === 0 ? "Tutup" : "Kembali"}
+              accessibilityLabel={
+                step === 0 || (existing && step === 1) ? "Tutup" : "Kembali"
+              }
               onPress={() =>
-                step === 0 ? close() : setStep((step - 1) as Step)
+                step === 0 || (existing && step === 1)
+                  ? close()
+                  : setStep((step - 1) as Step)
               }
               disabled={!!busy}
               style={{
-                width: 40,
-                height: 40,
+                width: 44,
+                height: 44,
                 borderRadius: 14,
                 backgroundColor: C.white,
                 borderWidth: 1,
@@ -505,17 +604,17 @@ export default function AddMeal() {
                 />
               ))}
             </View>
-            <View style={{ width: 40 }} />
+            <View style={{ width: 44 }} />
           </Row>
 
           <View style={{ gap: 3 }}>
-            <Txt size={10} bold color={C.green} style={{ letterSpacing: 1.6 }}>
+            <Txt size={12} bold color={C.green} style={{ letterSpacing: 1.6 }}>
               {copy.eyebrow}
             </Txt>
             <Txt bold size={compact ? 23 : 27}>
               {copy.title}
             </Txt>
-            <Txt size={12} color={C.muted}>
+            <Txt size={14} color={C.muted}>
               {copy.body}
             </Txt>
           </View>
@@ -573,11 +672,13 @@ export default function AddMeal() {
                         right: 12,
                         backgroundColor: "rgba(255,255,255,0.9)",
                         paddingHorizontal: 12,
-                        paddingVertical: 8,
-                        borderRadius: 99,
+                        minHeight: 44,
+                        justifyContent: "center",
+                        paddingVertical: 10,
+                        borderRadius: 14,
                       }}
                     >
-                      <Txt bold size={11} color={C.rose}>
+                      <Txt bold size={13} color={C.rose}>
                         Ganti foto
                       </Txt>
                     </Pressable>
@@ -617,24 +718,22 @@ export default function AddMeal() {
                   disabled={!!busy}
                 />
                 <SmallIconButton
-                  icon="plus"
+                  icon="image"
                   label="Pilih galeri"
                   onPress={() => void pick(false)}
                   disabled={!!busy}
                 />
               </View>
-              {photo ? (
+              {photo || photoOnly ? (
                 <Button
-                  title={
-                    app.ai.mock ? "Lihat hasil simulasi →" : "Analisis foto →"
-                  }
+                  title="Analisis foto"
                   onPress={() => void analyzePhoto()}
                   loading={busy === "Mengenali makanan…"}
-                  disabled={!!busy}
+                  disabled={!!busy || !base64}
                 />
               ) : (
                 <Button
-                  title="Lanjut tanpa foto →"
+                  title="Lanjut tanpa foto"
                   variant="soft"
                   onPress={() => {
                     setError("");
@@ -645,7 +744,42 @@ export default function AddMeal() {
             </>
           )}
 
-          {step === 1 && (
+          {confirming && (
+            <>
+              <ScrollView
+                key="food-questions"
+                style={{ flex: 1, minHeight: 0 }}
+                contentContainerStyle={{ paddingBottom: 8 }}
+                keyboardShouldPersistTaps="handled"
+              >
+                <FoodQuestions
+                  questions={questions}
+                  photo={photo}
+                  items={items}
+                  answers={answers}
+                  onAnswer={(id, value) =>
+                    setAnswers((current) => ({ ...current, [id]: value }))
+                  }
+                  disabled={!!busy}
+                />
+              </ScrollView>
+              <Button
+                title="Lanjut ke hasil"
+                loading={!!busy}
+                onPress={() => void confirmFoods()}
+              />
+              <Button
+                title="Lewati, pakai estimasi awal"
+                variant="ghost"
+                disabled={!!busy}
+                onPress={() => {
+                  setConfirmationDone(true);
+                  setError("");
+                }}
+              />
+            </>
+          )}
+          {step === 1 && !confirming && (
             <>
               <View
                 style={{
@@ -656,7 +790,7 @@ export default function AddMeal() {
               >
                 <Row>
                   <View>
-                    <Txt size={10} bold color={C.green}>
+                    <Txt size={12} bold color={C.green}>
                       TOTAL ESTIMASI
                     </Txt>
                     <Txt bold size={24} color={C.green}>
@@ -665,9 +799,10 @@ export default function AddMeal() {
                   </View>
                   <Pressable
                     accessibilityRole="button"
+                    accessibilityLabel="Tambah makanan"
                     onPress={openPicker}
                     style={{
-                      height: 40,
+                      height: 44,
                       paddingHorizontal: 14,
                       borderRadius: 13,
                       backgroundColor: C.green,
@@ -694,6 +829,7 @@ export default function AddMeal() {
                       <FoodRow
                         key={food.name + index}
                         food={food}
+                        photo={photo}
                         onChange={(next) =>
                           setItems((current) =>
                             current.map((item, itemIndex) =>
@@ -710,6 +846,7 @@ export default function AddMeal() {
                         }
                       />
                     ))}
+                    <FoodImageCredit />
                   </ScrollView>
                 ) : (
                   <Pressable
@@ -737,7 +874,7 @@ export default function AddMeal() {
                 )}
               </View>
               <Button
-                title="Sudah sesuai, lanjut →"
+                title="Sudah sesuai, lanjut"
                 onPress={() => {
                   setError("");
                   setStep(2);
@@ -749,7 +886,10 @@ export default function AddMeal() {
 
           {step === 2 && (
             <>
-              <View
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                contentContainerStyle={{ padding: 16, gap: 16 }}
                 style={{
                   flex: 1,
                   minHeight: 0,
@@ -757,13 +897,13 @@ export default function AddMeal() {
                   borderRadius: 22,
                   borderWidth: 1,
                   borderColor: C.line,
-                  padding: compact ? 12 : 16,
-                  gap: compact ? 10 : 14,
                 }}
               >
                 <Row>
                   <View
                     style={{
+                      flex: 1,
+                      minWidth: 0,
                       flexDirection: "row",
                       alignItems: "center",
                       gap: 10,
@@ -789,7 +929,7 @@ export default function AddMeal() {
                         <Txt>🥗</Txt>
                       </View>
                     )}
-                    <View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
                       <Txt bold>{items.length} makanan</Txt>
                       <Txt size={12} color={C.muted}>
                         P {Math.round(totals.protein_g)} · K{" "}
@@ -802,17 +942,19 @@ export default function AddMeal() {
                     <Txt bold size={20} color={C.green}>
                       {Math.round(totals.calories)}
                     </Txt>
-                    <Txt size={10} color={C.green}>
+                    <Txt size={12} color={C.green}>
                       kkal
                     </Txt>
                   </View>
                 </Row>
 
                 <View style={{ gap: 7 }}>
-                  <Txt size={11} bold color={C.muted}>
+                  <Txt size={13} bold color={C.muted}>
                     WAKTU MAKAN
                   </Txt>
-                  <View style={{ flexDirection: "row", gap: 5 }}>
+                  <View
+                    style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+                  >
                     {mealTypes.map((mealType) => {
                       const selected = type === mealType;
                       return (
@@ -822,8 +964,9 @@ export default function AddMeal() {
                           accessibilityState={{ selected }}
                           onPress={() => setType(mealType)}
                           style={{
-                            flex: 1,
-                            height: 38,
+                            width: "48%",
+                            flexGrow: 1,
+                            minHeight: 48,
                             borderRadius: 12,
                             alignItems: "center",
                             justifyContent: "center",
@@ -832,9 +975,9 @@ export default function AddMeal() {
                         >
                           <Txt
                             bold
-                            size={width < 390 ? 9 : 10}
+                            size={12}
                             color={selected ? C.white : C.muted}
-                            numberOfLines={1}
+                            numberOfLines={2}
                           >
                             {mealLabels[mealType]}
                           </Txt>
@@ -844,32 +987,36 @@ export default function AddMeal() {
                   </View>
                 </View>
 
-                <Field
-                  label="Tanggal"
+                <DateField
+                  label="Tanggal makan"
                   value={date}
                   onChangeText={setDate}
-                  placeholder="YYYY-MM-DD"
-                  style={{ minHeight: 44, height: 44 }}
+                  max={dayKey()}
                 />
                 <Field
-                  label="Catatan opsional"
+                  label="Catatan (opsional)"
                   value={note}
                   onChangeText={setNote}
                   placeholder="Tambahkan catatan singkat…"
                   maxLength={6000}
-                  style={{ minHeight: 46, height: 46 }}
+                  multiline
                 />
 
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setStep(1)}
-                  style={{ alignSelf: "center", padding: 5 }}
+                  style={{
+                    alignSelf: "center",
+                    minHeight: 44,
+                    justifyContent: "center",
+                    paddingHorizontal: 16,
+                  }}
                 >
                   <Txt bold size={12} color={C.green}>
                     Ubah makanan
                   </Txt>
                 </Pressable>
-              </View>
+              </ScrollView>
               <Button
                 title={busy === "Menyimpan…" ? "Menyimpan…" : "Simpan catatan"}
                 onPress={() => void save()}
@@ -881,9 +1028,14 @@ export default function AddMeal() {
                   accessibilityRole="button"
                   onPress={confirmRemove}
                   disabled={!!busy}
-                  style={{ alignSelf: "center", padding: 4 }}
+                  style={{
+                    alignSelf: "center",
+                    minHeight: 44,
+                    justifyContent: "center",
+                    paddingHorizontal: 16,
+                  }}
                 >
-                  <Txt size={11} bold color={C.rose}>
+                  <Txt size={13} bold color={C.rose}>
                     Hapus catatan
                   </Txt>
                 </Pressable>
@@ -919,16 +1071,17 @@ export default function AddMeal() {
             edges={["bottom"]}
             style={{
               width: "100%",
-              maxWidth: 620,
-              maxHeight: "82%",
+              maxWidth: MOBILE_WIDTH,
+              maxHeight: keyboard ? "95%" : "86%",
               backgroundColor: C.bg,
               borderTopLeftRadius: 28,
               borderTopRightRadius: 28,
               overflow: "hidden",
+              flexShrink: 1,
             }}
           >
-            <View style={{ padding: 18, gap: 12 }}>
-              <Row>
+            <View style={{ padding: 18, gap: 12, flexShrink: 1, minHeight: 0 }}>
+              <Row style={{ flexShrink: 0 }}>
                 <Txt bold size={21}>
                   {manualMode ? "Isi makanan" : "Tambah makanan"}
                 </Txt>
@@ -937,8 +1090,8 @@ export default function AddMeal() {
                   accessibilityLabel="Tutup"
                   onPress={() => setPickerOpen(false)}
                   style={{
-                    width: 36,
-                    height: 36,
+                    width: 44,
+                    height: 44,
                     borderRadius: 12,
                     backgroundColor: C.white,
                     alignItems: "center",
@@ -956,6 +1109,34 @@ export default function AddMeal() {
                   keyboardShouldPersistTaps="handled"
                   contentContainerStyle={{ gap: 11 }}
                 >
+                  <Row style={{ gap: 12 }}>
+                    <FoodImage name={manual.name} fallbackUri={photo} />
+                    <View style={{ flex: 1 }}>
+                      <Txt bold size={14}>
+                        Gambar makanan
+                      </Txt>
+                      <Txt size={12} color={C.muted}>
+                        {foodImage(manual.name)
+                          ? "Ilustrasi tersedia untuk menu ini."
+                          : photo
+                            ? "Foto makananmu akan ikut disimpan."
+                            : "Tambahkan foto agar catatanmu punya gambar."}
+                      </Txt>
+                    </View>
+                  </Row>
+                  <Button
+                    title={
+                      photo ? "Ganti foto makanan" : "Tambahkan foto makanan"
+                    }
+                    variant="soft"
+                    onPress={() => void pick(false)}
+                    loading={!!busy}
+                  />
+                  {!!error && (
+                    <Txt accessibilityRole="alert" size={13} color={C.rose}>
+                      {error}
+                    </Txt>
+                  )}
                   <Field
                     label="Nama makanan"
                     value={manual.name}
@@ -1018,57 +1199,16 @@ export default function AddMeal() {
                   />
                 </ScrollView>
               ) : (
-                <>
-                  <Field
-                    label="Cari menu"
-                    placeholder="Nasi, ayam, tempe…"
-                    value={query}
-                    onChangeText={setQuery}
-                    autoFocus={Platform.OS === "web"}
-                  />
-                  <ScrollView
-                    style={{ minHeight: 120, maxHeight: 330 }}
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {results.map((food) => (
-                      <Pressable
-                        key={food.name}
-                        accessibilityRole="button"
-                        accessibilityLabel={"Tambah " + food.name}
-                        onPress={() => addFood(food)}
-                        style={{
-                          paddingVertical: 12,
-                          borderBottomWidth: 1,
-                          borderBottomColor: C.line,
-                        }}
-                      >
-                        <Row>
-                          <View>
-                            <Txt bold size={14}>
-                              {food.name}
-                            </Txt>
-                            <Txt size={10} color={C.muted}>
-                              {food.portion_g} g
-                            </Txt>
-                          </View>
-                          <Txt bold color={C.green}>
-                            {Math.round(food.calories)} kkal ＋
-                          </Txt>
-                        </Row>
-                      </Pressable>
-                    ))}
-                    {!results.length && (
-                      <View style={{ alignItems: "center", padding: 24 }}>
-                        <Txt color={C.muted}>Menu belum ditemukan.</Txt>
-                      </View>
-                    )}
-                  </ScrollView>
-                  <Button
-                    title="Isi makanan sendiri"
-                    variant="soft"
-                    onPress={() => setManualMode(true)}
-                  />
-                </>
+                <FoodSearch
+                  active={pickerOpen}
+                  keyboard={keyboard}
+                  onAdd={addFood}
+                  onManual={() => setManualMode(true)}
+                  onPhoto={() => {
+                    setPickerOpen(false);
+                    setStep(0);
+                  }}
+                />
               )}
             </View>
           </SafeAreaView>

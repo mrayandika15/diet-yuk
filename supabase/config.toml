@@ -14,11 +14,15 @@ port = 54323
 [auth]
 enabled = true
 site_url = "http://localhost:8081"
-additional_redirect_urls = ["http://localhost:4173"]
-enable_anonymous_sign_ins = true
+additional_redirect_urls = ["http://localhost:8081/welcome", "http://localhost:4173/welcome", "http://localhost:3000/welcome"]
+enable_anonymous_sign_ins = false
 [auth.email]
-enable_signup = true
+enable_signup = false
 enable_confirmations = false
 [storage]
 enabled = true
 file_size_limit = "8MiB"
+
+[auth.hook.before_user_created]
+enabled = true
+uri = "pg-functions://postgres/public/before_user_created"

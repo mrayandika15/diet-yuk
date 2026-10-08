@@ -26,16 +26,27 @@ export default function Progress() {
   const weights = [...app.weights].sort((a, b) => a.date.localeCompare(b.date));
   const last = weights.at(-1)?.weight ?? app.profile.weight;
   const dates = Array.from({ length: range }, (_, i) => daysAgo(range - 1 - i));
-  const values = dates.map(
-    (date) =>
-      total(app.meals.filter((m) => m.date === date).flatMap((m) => m.items))
-        .calories,
+  const values = dates.map((date) => {
+    const meals = app.meals.filter((meal) => meal.date === date);
+    return meals.length
+      ? total(meals.flatMap((meal) => meal.items)).calories
+      : null;
+  });
+  const recordedValues = values.filter(
+    (value): value is number => value !== null,
   );
+  const average = recordedValues.length
+    ? Math.round(
+        recordedValues.reduce((sum, value) => sum + value, 0) /
+          recordedValues.length,
+      )
+    : null;
   const recent = weights.slice(-15);
   const dateLabels = dates.map((date) =>
-    new Date(date + "T12:00:00")
-      .toLocaleDateString("id-ID", { weekday: "short" })
-      .slice(0, 3),
+    new Date(date + "T12:00:00").toLocaleDateString(
+      "id-ID",
+      range === 7 ? { weekday: "short" } : { day: "numeric", month: "numeric" },
+    ),
   );
   async function save() {
     setBusy(true);
@@ -55,11 +66,11 @@ export default function Progress() {
     }
   }
   return (
-    <Page refresh={() => app.reload().catch(() => {})} bottom={132}>
+    <Page refresh={() => app.reload().catch(() => {})} tabs>
       <Heading
         eyebrow="Sedikit demi sedikit"
-        title="Perjalanan kita."
-        subtitle="Bukan tentang sempurna. Tentang terus mencoba."
+        title="Perjalananmu"
+        subtitle="Lihat ritme makan dan perubahan beratmu."
       />
       <Row>
         <Chip
@@ -81,7 +92,7 @@ export default function Progress() {
           <Txt size={18} bold>
             Ritme makanmu
           </Txt>
-          <Txt size={11} color={C.muted}>
+          <Txt size={13} color={C.muted}>
             kkal / hari
           </Txt>
         </Row>
@@ -90,10 +101,11 @@ export default function Progress() {
           labels={dateLabels}
           target={app.profile.calorieTarget}
         />
-        <Txt size={12} color={C.muted}>
-          Target {app.profile.calorieTarget} kkal · Rata-rata{" "}
-          {Math.round(values.reduce((a, b) => a + b, 0) / range)} kkal/hari
-          (termasuk hari kosong)
+        <Txt size={13} color={C.muted}>
+          {average === null
+            ? "Belum ada makanan tercatat pada periode ini."
+            : `Rata-rata ${average.toLocaleString("id-ID")} kkal dari ${recordedValues.length} hari tercatat.`}{" "}
+          Garis putus-putus menunjukkan target harian.
         </Txt>
       </Card>
       <Card color={C.mint}>
@@ -133,22 +145,34 @@ export default function Progress() {
             keyboardType="decimal-pad"
             value={weight}
             onChangeText={setWeight}
+            editable={!busy}
+            onSubmitEditing={() => {
+              if (weight.trim() && !busy) void save();
+            }}
           />
           <View style={{ paddingTop: 22 }}>
-            <Button title="Simpan" onPress={save} loading={busy} />
+            <Button
+              title="Simpan"
+              onPress={save}
+              loading={busy}
+              disabled={!weight.trim()}
+            />
           </View>
         </Row>
         <Notice text={error} error />
         <Notice text={message} />
       </Card>
-      <Heading title="Hal kecil, patut dirayakan." />
+      <Txt size={20} bold>
+        Hal kecil, patut dirayakan
+      </Txt>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
         {badges(app.meals, app.weights, app.profile).map((b) => (
           <Card
             key={b.code}
             color={b.earned ? C.peach : "#F0F0E9"}
             style={{
-              width: "47%",
+              width: "48%",
+              flexGrow: 1,
               alignItems: "center",
               padding: 15,
               opacity: b.earned ? 1 : 0.6,
@@ -161,7 +185,7 @@ export default function Progress() {
           </Card>
         ))}
       </View>
-      <Txt size={12} color={C.muted}>
+      <Txt size={13} color={C.muted}>
         Streak dihitung saat kamu mencatat setidaknya 2 kali makan per hari.
         Hari ini masih punya kesempatan.
       </Txt>
@@ -176,7 +200,7 @@ export default function Progress() {
                 <Txt size={13} numberOfLines={1}>
                   {m.items.map((i) => i.name).join(", ")}
                 </Txt>
-                <Txt size={11} color={C.muted}>
+                <Txt size={13} color={C.muted}>
                   {m.date}
                 </Txt>
               </View>

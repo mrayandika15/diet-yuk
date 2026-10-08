@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import { router } from "expo-router";
 import { useApp } from "../../src/state/AppContext";
-import { dayKey, mealLabels, total } from "../../src/lib/domain";
+import { FoodImage } from "../../src/components/FoodImage";
+import { dayKey, daysAgo, mealLabels, total } from "../../src/lib/domain";
 import {
+  Button,
   C,
   Card,
   Empty,
@@ -15,12 +17,22 @@ import {
   Txt,
 } from "../../src/components/ui";
 
+function dateLabel(date: string) {
+  if (date === dayKey()) return "Hari ini";
+  if (date === daysAgo(1)) return "Kemarin";
+  return new Date(date + "T12:00:00+07:00").toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Jakarta",
+  });
+}
 export default function Meals() {
   const app = useApp();
   const [query, setQuery] = useState("");
-  const meals = useMemo(() => {
+  const groups = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("id-ID");
-    return [...app.meals]
+    const meals = [...app.meals]
       .filter(
         (meal) =>
           !needle ||
@@ -33,135 +45,172 @@ export default function Meals() {
           b.date.localeCompare(a.date) ||
           b.createdAt.localeCompare(a.createdAt),
       );
+    const result: { date: string; meals: typeof meals }[] = [];
+    for (const meal of meals) {
+      let group = result.at(-1);
+      if (!group || group.date !== meal.date) {
+        group = { date: meal.date, meals: [] };
+        result.push(group);
+      }
+      group.meals.push(meal);
+    }
+    return result;
   }, [app.meals, query]);
-
   const today = app.meals.filter((meal) => meal.date === dayKey());
   const todayTotal = total(today.flatMap((meal) => meal.items));
-
   return (
-    <Page refresh={() => app.reload().catch(() => {})} bottom={132}>
+    <Page refresh={() => app.reload().catch(() => {})} tabs>
       <Heading
-        eyebrow="Semua yang sudah dicatat"
-        title="Catatan makan."
-        subtitle="Cari, buka kembali, lalu sesuaikan kapan saja."
+        eyebrow="Piring demi piring"
+        title="Catatan makan"
+        subtitle="Temukan dan sesuaikan makanan yang sudah dicatat."
       />
-
-      <Card color={C.mint}>
-        <Row>
-          <View style={{ gap: 3 }}>
-            <Txt size={11} bold color={C.green} style={{ letterSpacing: 1.3 }}>
-              HARI INI
+      <Row
+        style={{
+          paddingBottom: 16,
+          borderBottomWidth: 1,
+          borderBottomColor: C.line,
+        }}
+      >
+        <View style={{ gap: 3, flex: 1 }}>
+          <Txt size={13} color={C.muted}>
+            Hari ini · {today.length} catatan
+          </Txt>
+          <Txt size={25} bold>
+            {Math.round(todayTotal.calories).toLocaleString("id-ID")}{" "}
+            <Txt size={14} color={C.muted}>
+              kkal
             </Txt>
-            <Txt size={30} bold>
-              {Math.round(todayTotal.calories)} <Txt size={14}>kkal</Txt>
-            </Txt>
-            <Txt size={12} color={C.green}>
-              {today.length} catatan ·{" "}
-              {today.flatMap((meal) => meal.items).length} item
-            </Txt>
-          </View>
+          </Txt>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Tambah catatan makanan"
+          onPress={() => router.push("/add-meal")}
+          style={({ pressed }) => ({
+            width: 48,
+            height: 48,
+            borderRadius: 16,
+            backgroundColor: C.mint,
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Icon name="plus" size={24} />
+        </Pressable>
+      </Row>
+      <Row style={{ alignItems: "flex-end", gap: 8 }}>
+        <Field
+          label="Cari makanan"
+          placeholder="Nasi, ayam, kopi…"
+          value={query}
+          onChangeText={setQuery}
+          returnKeyType="search"
+          autoCorrect={false}
+        />
+        {!!query && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Tambah makanan"
-            onPress={() => router.push("/add-meal")}
-            style={({ pressed }) => ({
-              width: 52,
+            accessibilityLabel="Hapus pencarian"
+            onPress={() => setQuery("")}
+            style={{
+              width: 44,
               height: 52,
-              borderRadius: 18,
-              backgroundColor: C.green,
               alignItems: "center",
               justifyContent: "center",
-              opacity: pressed ? 0.75 : 1,
-            })}
+            }}
           >
-            <Icon name="plus" color={C.white} size={25} />
+            <Txt size={24} color={C.muted}>
+              ×
+            </Txt>
           </Pressable>
-        </Row>
-      </Card>
-
-      <Field
-        label="Cari di catatan"
-        placeholder="Contoh: nasi, ayam, kopi…"
-        value={query}
-        onChangeText={setQuery}
-      />
-
-      <View style={{ gap: 11 }}>
-        {meals.length ? (
-          meals.map((meal) => {
-            const mealTotal = total(meal.items);
-            return (
-              <Pressable
-                key={meal.id}
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push({
-                    pathname: "/add-meal",
-                    params: { id: meal.id },
-                  })
-                }
-                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
-              >
-                <Card style={{ padding: 16, borderRadius: 20 }}>
-                  <Row>
-                    <View
-                      style={{
-                        width: 45,
-                        height: 45,
-                        borderRadius: 15,
-                        backgroundColor:
-                          meal.date === dayKey() ? C.peach : C.mint,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Txt size={21}>
-                        {
-                          {
-                            breakfast: "🍳",
-                            lunch: "🥗",
-                            dinner: "🍲",
-                            snack: "🍎",
-                          }[meal.type]
-                        }
+        )}
+      </Row>
+      {groups.length ? (
+        groups.map((group) => (
+          <View key={group.date} style={{ gap: 10 }}>
+            <Row>
+              <Txt size={16} bold>
+                {dateLabel(group.date)}
+              </Txt>
+              <Txt size={13} color={C.muted}>
+                {Math.round(
+                  total(group.meals.flatMap((meal) => meal.items)).calories,
+                ).toLocaleString("id-ID")}{" "}
+                kkal
+              </Txt>
+            </Row>
+            <Card style={{ paddingVertical: 0 }}>
+              {group.meals.map((meal, index) => (
+                <Pressable
+                  key={meal.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${mealLabels[meal.type]}, ${dateLabel(meal.date)}`}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/add-meal",
+                      params: { id: meal.id },
+                    })
+                  }
+                  style={({ pressed }) => ({
+                    paddingVertical: 16,
+                    minHeight: 76,
+                    borderTopWidth: index ? 1 : 0,
+                    borderTopColor: C.line,
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <Row style={{ gap: 10 }}>
+                    <FoodImage
+                      name={meal.items[0].name}
+                      imageUrl={meal.items[0].image_url}
+                      fallbackUri={meal.photo}
+                      size={48}
+                    />
+                    <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                      <Txt bold size={15}>
+                        {mealLabels[meal.type]}
                       </Txt>
-                    </View>
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Row>
-                        <Txt bold>{mealLabels[meal.type]}</Txt>
-                        <Txt size={12} color={C.muted}>
-                          {meal.date === dayKey() ? "Hari ini" : meal.date}
-                        </Txt>
-                      </Row>
                       <Txt size={13} color={C.muted} numberOfLines={2}>
                         {meal.items.map((item) => item.name).join(" · ")}
                       </Txt>
                     </View>
-                    <View style={{ alignItems: "flex-end" }}>
-                      <Txt bold>{Math.round(mealTotal.calories)}</Txt>
-                      <Txt size={10} color={C.muted}>
+                    <View style={{ alignItems: "flex-end", gap: 1 }}>
+                      <Txt size={15} bold>
+                        {Math.round(total(meal.items).calories)}
+                      </Txt>
+                      <Txt size={12} color={C.muted}>
                         kkal
                       </Txt>
                     </View>
+                    <Icon name="next" size={16} color={C.muted} />
                   </Row>
-                </Card>
-              </Pressable>
-            );
-          })
-        ) : (
-          <Card>
-            <Empty
-              icon={query ? "🔎" : "🥣"}
-              title={query ? "Belum ketemu" : "Catatanmu masih kosong"}
-              body={
-                query
-                  ? "Coba kata yang lebih singkat atau nama makanan lain."
-                  : "Tekan tombol tambah di bawah untuk membuat catatan pertama."
-              }
-            />
-          </Card>
-        )}
-      </View>
+                </Pressable>
+              ))}
+            </Card>
+          </View>
+        ))
+      ) : (
+        <View style={{ gap: 16, paddingTop: 12 }}>
+          <Empty
+            icon={query ? "🔎" : "🥣"}
+            title={query ? "Belum ketemu" : "Piring pertama, yuk"}
+            body={
+              query
+                ? "Coba nama makanan lain atau hapus pencarian."
+                : "Ambil foto makanan. Kamu bisa memeriksa porsinya sebelum menyimpan."
+            }
+          />
+          <Button
+            title={query ? "Hapus pencarian" : "Foto makanan pertama"}
+            variant="soft"
+            onPress={() =>
+              query ? setQuery("") : router.push("/add-meal?photoOnly=1")
+            }
+          />
+        </View>
+      )}
     </Page>
   );
 }

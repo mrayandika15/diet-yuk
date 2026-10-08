@@ -22,19 +22,22 @@ import {
 } from "../../src/components/ui";
 import { CalorieDonut } from "../../src/components/charts";
 import { companionName } from "../../src/lib/personal";
+
 export default function Home() {
   const app = useApp();
   const partnerName = app.partner?.name || companionName(app.profile.name);
   const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
   const todays = app.meals.filter((m) => m.date === dayKey());
   const totals = total(todays.flatMap((m) => m.items));
   const days = countdown(app.partner?.weddingDate ?? app.profile.weddingDate);
+  const remaining = app.profile.calorieTarget - totals.calories;
   const macros = [
     {
       label: "Protein",
       value: totals.protein_g,
       target: app.profile.targetWeight * 1.6,
-      color: "#789EC0",
+      color: "#6B8CAF",
     },
     {
       label: "Karbo",
@@ -45,89 +48,129 @@ export default function Home() {
           app.profile.targetWeight * 1.6 * 4) /
           4,
       ),
-      color: "#CDA66E",
+      color: "#B88A4E",
     },
     {
       label: "Lemak",
       value: totals.fat_g,
       target: (app.profile.calorieTarget * 0.25) / 9,
-      color: "#B69DBB",
+      color: "#A287AC",
     },
   ];
+  async function cheer(emoji: string) {
+    if (sending) return;
+    setSending(true);
+    try {
+      await app.sendCheer(emoji);
+      setMessage("Semangat terkirim " + emoji);
+    } catch (e) {
+      setMessage((e as Error).message);
+    } finally {
+      setSending(false);
+    }
+  }
   return (
-    <Page refresh={() => app.reload().catch(() => {})} bottom={132}>
+    <Page refresh={() => app.reload().catch(() => {})} tabs>
       <Row>
-        <View>
-          <Txt size={11} bold color={C.muted} style={{ letterSpacing: 1.5 }}>
-            {new Date()
-              .toLocaleDateString("id-ID", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                timeZone: "Asia/Jakarta",
-              })
-              .toUpperCase()}
+        <View style={{ flex: 1, gap: 4 }}>
+          <Txt size={12} color={C.muted}>
+            {new Date().toLocaleDateString("id-ID", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              timeZone: "Asia/Jakarta",
+            })}
           </Txt>
-          <Txt size={29} bold>
-            Halo, {app.profile.name} <Txt size={25}>☀️</Txt>
+          <Txt size={28} bold accessibilityRole="header">
+            Halo, {app.profile.name} ☀️
           </Txt>
         </View>
         <View
-          style={{ backgroundColor: C.peach, padding: 12, borderRadius: 18 }}
+          accessibilityLabel={`${streak(app.meals)} hari berturut-turut`}
+          style={{
+            backgroundColor: C.peach,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderRadius: 16,
+          }}
         >
-          <Txt bold size={13}>
+          <Txt bold size={14}>
             🔥 {streak(app.meals)}
           </Txt>
         </View>
       </Row>
       <Notice text={app.error} error />
-      <Card color={C.mint} style={{ padding: 16 }}>
-        <Row>
-          <View style={{ flex: 1, gap: 5 }}>
-            <Txt size={10} bold color={C.green} style={{ letterSpacing: 1.7 }}>
-              RAKA & ANGGUN
-            </Txt>
-            <Txt size={23} bold>
-              {days} <Txt size={14}>hari menuju hari kita</Txt>
-            </Txt>
-            <Txt size={12} color={C.green}>
-              Sehat bareng, satu hari sekaligus.
-            </Txt>
-          </View>
-        </Row>
-      </Card>
       <Card>
         <Row>
           <Txt size={18} bold>
             Kalori hari ini
           </Txt>
+          <Txt size={12} color={C.muted}>
+            Estimasi
+          </Txt>
         </Row>
-        <CalorieDonut
-          value={totals.calories}
-          target={app.profile.calorieTarget}
-        />
-        <Txt size={13} color={C.muted} style={{ textAlign: "center" }}>
-          {totals.calories <= app.profile.calorieTarget
-            ? `${Math.round(app.profile.calorieTarget - totals.calories).toLocaleString("id-ID")} kkal menuju target hari ini`
-            : "Target hari ini terlewati. Besok kita lanjut lagi 🌷"}
-        </Txt>
-        <Row style={{ marginTop: 9 }}>
+        <Row style={{ gap: 10 }}>
+          <CalorieDonut
+            value={totals.calories}
+            target={app.profile.calorieTarget}
+            size={164}
+          />
+          <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
+            <View style={{ gap: 2 }}>
+              <Txt size={13} color={C.muted}>
+                {remaining >= 0 ? "Sisa hari ini" : "Di atas target"}
+              </Txt>
+              <Txt
+                size={26}
+                bold
+                color={remaining >= 0 ? C.green : C.rose}
+                style={{ fontVariant: ["tabular-nums"] }}
+              >
+                {Math.round(Math.abs(remaining)).toLocaleString("id-ID")}
+              </Txt>
+              <Txt size={12} color={C.muted}>
+                kkal
+              </Txt>
+            </View>
+            <View style={{ gap: 2 }}>
+              <Txt size={12} color={C.muted}>
+                Target harian
+              </Txt>
+              <Txt size={14} bold>
+                {app.profile.calorieTarget.toLocaleString("id-ID")} kkal
+              </Txt>
+            </View>
+          </View>
+        </Row>
+        {remaining < 0 && (
+          <Txt size={13} color={C.rose}>
+            Tetap catat dengan tenang. Target ini panduan awalmu.
+          </Txt>
+        )}
+        <Row
+          style={{
+            gap: 14,
+            borderTopWidth: 1,
+            borderTopColor: C.line,
+            paddingTop: 14,
+          }}
+        >
           {macros.map((m) => (
-            <View key={m.label} style={{ flex: 1, gap: 6 }}>
+            <View key={m.label} style={{ flex: 1, minWidth: 0, gap: 6 }}>
               <Txt size={12} color={C.muted}>
                 {m.label}
               </Txt>
               <Txt bold size={15}>
                 {Math.round(m.value)}{" "}
-                <Txt color={C.muted} size={11}>
-                  / {Math.round(m.target)} g
+                <Txt size={12} color={C.muted}>
+                  g
                 </Txt>
               </Txt>
               <View
                 style={{
                   height: 5,
                   backgroundColor: C.line,
-                  borderRadius: 10,
+                  borderRadius: 8,
                   overflow: "hidden",
                 }}
               >
@@ -145,175 +188,175 @@ export default function Home() {
       </Card>
       <Pressable
         accessibilityRole="button"
-        onPress={() => router.push("/add-meal?camera=1")}
+        accessibilityLabel="Foto makanan untuk dicatat"
+        onPress={() => router.push("/add-meal?photoOnly=1")}
         style={({ pressed }) => ({
-          borderRadius: 22,
+          borderRadius: 20,
           backgroundColor: C.green,
-          padding: 18,
+          padding: 16,
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-between",
+          gap: 14,
           opacity: pressed ? 0.82 : 1,
         })}
       >
-        <View style={{ gap: 3 }}>
-          <Txt size={11} bold color="#DDEADB" style={{ letterSpacing: 1.2 }}>
-            CATAT MAKAN
-          </Txt>
-          <Txt size={18} bold color={C.white}>
-            Foto piringmu
-          </Txt>
-          <Txt size={12} color="#DDEADB">
-            Foto → cek hasil → simpan
-          </Txt>
-        </View>
         <View
           style={{
-            width: 48,
-            height: 48,
-            borderRadius: 17,
-            backgroundColor: "rgba(255,255,255,0.16)",
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            backgroundColor: "rgba(255,253,252,.14)",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
           <Icon name="camera" color={C.white} size={25} />
         </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Txt size={17} bold color={C.white}>
+            Foto makananmu
+          </Txt>
+          <Txt size={13} color="#E7EFDF">
+            Foto, cek porsi, lalu simpan.
+          </Txt>
+        </View>
+        <Icon name="next" color={C.white} size={18} />
       </Pressable>
+      <Row style={{ justifyContent: "center", gap: 6 }}>
+        <Icon name="heart" color={C.rose} size={16} />
+        <Txt size={13} color={C.muted}>
+          {Math.max(0, days)} hari menuju hari kita
+        </Txt>
+      </Row>
       <View style={{ gap: 12 }}>
         <Row>
-          <Txt size={21} bold>
-            Menu hari ini
+          <Txt size={20} bold>
+            Makan hari ini
           </Txt>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push("/add-meal")}
-            style={{ padding: 8 }}
-          >
-            <Txt color={C.green} bold size={13}>
-              + Tambah
-            </Txt>
-          </Pressable>
+          <Txt size={12} color={C.muted}>
+            {todays.length} catatan
+          </Txt>
         </Row>
-        {mealTypes.map((type, i) => {
-          const list = todays.filter((m) => m.type === type);
-          return (
-            <Card key={type} style={{ padding: 16, borderRadius: 20 }}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push({ pathname: "/add-meal", params: { type } })
-                }
+        <Card style={{ paddingVertical: 4 }}>
+          {mealTypes.map((type, index) => {
+            const meals = todays.filter((m) => m.type === type);
+            return (
+              <View
+                key={type}
+                style={{
+                  paddingVertical: 14,
+                  gap: 6,
+                  ...(index
+                    ? { borderTopWidth: 1, borderTopColor: C.line }
+                    : {}),
+                }}
               >
-                <Row>
-                  <Row>
-                    <View
-                      style={{
-                        padding: 11,
-                        borderRadius: 15,
-                        backgroundColor: [C.peach, C.mint, C.pink, "#EFEAF4"][
-                          i
-                        ],
-                      }}
-                    >
-                      <Txt size={21}>{["🍳", "🥗", "🍲", "🍎"][i]}</Txt>
-                    </View>
-                    <View>
-                      <Txt bold>{mealLabels[type]}</Txt>
-                      <Txt size={12} color={C.muted}>
-                        {list.length
-                          ? `${Math.round(total(list.flatMap((m) => m.items)).calories)} kkal`
-                          : "Belum dicatat"}
-                      </Txt>
-                    </View>
-                  </Row>
-                  <Icon name="plus" size={19} />
+                <Row style={{ gap: 12 }}>
+                  <View
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 12,
+                      backgroundColor: [C.peach, C.mint, C.pink, "#EFEAF4"][
+                        index
+                      ],
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Txt size={21}>{["🍳", "🥗", "🍲", "🍎"][index]}</Txt>
+                  </View>
+                  <Txt bold style={{ flex: 1 }} size={15}>
+                    {mealLabels[type]}
+                  </Txt>
+                  <Txt size={13} color={C.muted}>
+                    {meals.length
+                      ? `${Math.round(total(meals.flatMap((m) => m.items)).calories)} kkal`
+                      : "Belum dicatat"}
+                  </Txt>
                 </Row>
-              </Pressable>
-              {list.map((m) => (
-                <Pressable
-                  accessibilityRole="button"
-                  key={m.id}
-                  onPress={() =>
-                    router.push({ pathname: "/add-meal", params: { id: m.id } })
-                  }
-                  style={{
-                    borderTopWidth: 1,
-                    borderTopColor: C.line,
-                    paddingTop: 10,
-                  }}
-                >
-                  <Row>
-                    <Txt size={13} style={{ flex: 1 }} numberOfLines={2}>
-                      {m.items.map((i) => i.name).join(" · ")}
-                    </Txt>
-                    <Txt size={12} color={C.muted}>
-                      {Math.round(total(m.items).calories)} →
-                    </Txt>
-                  </Row>
-                </Pressable>
-              ))}
-            </Card>
-          );
-        })}
+                {meals.map((meal) => (
+                  <Pressable
+                    key={meal.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${mealLabels[type]}: ${meal.items.map((item) => item.name).join(", ")}`}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/add-meal",
+                        params: { id: meal.id },
+                      })
+                    }
+                    style={({ pressed }) => ({
+                      minHeight: 44,
+                      justifyContent: "center",
+                      paddingLeft: 50,
+                      opacity: pressed ? 0.65 : 1,
+                    })}
+                  >
+                    <Row>
+                      <Txt
+                        size={13}
+                        color={C.muted}
+                        style={{ flex: 1 }}
+                        numberOfLines={2}
+                      >
+                        {meal.items.map((item) => item.name).join(" · ")}
+                      </Txt>
+                      <Icon name="next" size={16} />
+                    </Row>
+                  </Pressable>
+                ))}
+              </View>
+            );
+          })}
+        </Card>
       </View>
       <Card color={C.pink}>
         <Row>
-          <View style={{ flex: 1, gap: 4 }}>
-            <Txt size={11} bold color={C.rose}>
+          <View style={{ flex: 1, gap: 3 }}>
+            <Txt size={12} bold color={C.rose}>
               KITA BERDUA
             </Txt>
             <Txt size={20} bold>
               {partnerName}
             </Txt>
             <Txt size={13} color={C.rose}>
-              {app.partner?.name
-                ? `${Math.round(app.partner.calories)} / ${app.partner.target} kkal hari ini`
-                : `Hubungkan akun untuk melihat kabar ${partnerName}.`}
+              {app.partner?.name && app.partner.ready !== false
+                ? `${Math.round(app.partner.calories).toLocaleString("id-ID")} dari ${app.partner.target.toLocaleString("id-ID")} kkal hari ini`
+                : `${partnerName} terhubung otomatis. Progresnya muncul setelah profil selesai.`}
             </Txt>
           </View>
-          <Icon name="heart" color={C.rose} size={34} />
+          <Icon name="heart" color={C.rose} size={30} />
         </Row>
-        {app.partner?.name ? (
+        {app.partner?.name && app.partner.ready !== false ? (
           <Row>
             {["❤️", "💪", "🥗", "🔥"].map((emoji) => (
               <Pressable
                 key={emoji}
                 accessibilityRole="button"
                 accessibilityLabel={"Kirim semangat " + emoji}
-                onPress={() =>
-                  void app
-                    .sendCheer(emoji)
-                    .then(() => setMessage("Semangat terkirim " + emoji))
-                    .catch((e) => setMessage(e.message))
-                }
-                style={{
-                  backgroundColor: "#FFF6F6",
-                  padding: 12,
-                  borderRadius: 15,
+                disabled={sending}
+                onPress={() => void cheer(emoji)}
+                style={({ pressed }) => ({
+                  minHeight: 48,
+                  backgroundColor: C.white,
+                  borderRadius: 14,
                   flex: 1,
                   alignItems: "center",
-                }}
+                  justifyContent: "center",
+                  opacity: sending ? 0.5 : pressed ? 0.7 : 1,
+                })}
               >
                 <Txt size={23}>{emoji}</Txt>
               </Pressable>
             ))}
           </Row>
-        ) : (
-          <Button
-            title={`Hubungkan dengan ${partnerName}`}
-            onPress={() => router.push("/(tabs)/settings")}
-            variant="ghost"
-          />
-        )}
+        ) : null}
         {!!app.cheer && (
-          <Txt size={13}>Semangat terbaru dari pasangan: {app.cheer}</Txt>
+          <Txt size={13}>Semangat dari pasangan: {app.cheer}</Txt>
         )}
         <Notice text={message} />
       </Card>
-      <Txt size={12} color={C.muted} style={{ textAlign: "center" }}>
-        Raka & Anggun ♡
-      </Txt>
     </Page>
   );
 }

@@ -1,18 +1,18 @@
 -- Run only in an isolated test database. Supabase service contracts are stubbed here.
 create schema auth;
 create schema storage;
-create table auth.users(id uuid primary key);
+create table auth.users(id uuid primary key, email text, is_anonymous boolean default false, email_confirmed_at timestamptz, raw_app_meta_data jsonb default '{}'::jsonb);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
 create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);
 create function storage.foldername(text) returns text[] language sql immutable as $$ select string_to_array($1,'/') $$;
 alter table storage.objects enable row level security;
-grant usage on schema public,auth,storage to authenticated,anon;
+grant usage on schema public,auth,storage to authenticated,anon,service_role;
 grant select,insert,update,delete on storage.objects to authenticated;
 create publication supabase_realtime;
 \ir ../supabase/migrations/202610060001_init.sql
 \ir ../supabase/migrations/202610080001_device_profiles.sql
-insert into auth.users values('00000000-0000-4000-8000-000000000001'),('00000000-0000-4000-8000-000000000002'),('00000000-0000-4000-8000-000000000003');
+insert into auth.users(id) values('00000000-0000-4000-8000-000000000001'),('00000000-0000-4000-8000-000000000002'),('00000000-0000-4000-8000-000000000003');
 set role authenticated;
 set request.jwt.claim.sub='00000000-0000-4000-8000-000000000001';
 insert into public.profiles values(auth.uid(),'{"name":"Raka","sex":"male","birthDate":"1998-01-01","height":170,"weight":70,"targetWeight":65,"activity":1.375,"calorieTarget":1900,"weddingDate":"2027-09-26"}');
@@ -75,3 +75,12 @@ do $$ begin
 end $$;
 reset role;
 select 'Database ownership, pairing, validation, and idempotency checks passed' as result;
+
+\ir google-auth.sql
+
+\ir managed-ai.sql
+
+\ir calorie-onboarding.sql
+\ir food-confirmation.sql
+\ir catalog-estimate.sql
+\ir default-couple.sql

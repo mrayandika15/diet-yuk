@@ -1,3 +1,5 @@
+> Pembaruan 8 Oktober 2026: alur kode undangan di rencana awal ini sudah diganti dengan pasangan otomatis untuk dua akun Google terverifikasi. Implementasi terbaru: migrasi `202610080007_default_couple.sql` dan [BACKEND.md](BACKEND.md).
+
 # 🛠️ diet-yuk — Implementation Plan
 
 > Panduan eksekusi teknis untuk [PLAN.md](../PLAN.md). Dikerjakan bertahap per fase; setiap fase punya **tugas** dan **kriteria selesai (DoD)**.
